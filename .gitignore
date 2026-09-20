@@ -1,0 +1,88 @@
+# ==============================================================================
+# AAJ KA KALESH - ROOT .GITIGNORE
+# Configured for GitHub upload, CI/CD, and multi-cloud deployment (Vercel/Render/Railway)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. DEPENDENCIES (Never commit node_modules - install fresh during deployment)
+# ------------------------------------------------------------------------------
+node_modules/
+*/node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+
+# ------------------------------------------------------------------------------
+# 2. PRODUCTION BUILDS & CACHES (Generated during deploy pipeline)
+# ------------------------------------------------------------------------------
+dist/
+*/dist/
+**/dist/
+build/
+*/build/
+out/
+.next/
+.vite/
+*/.vite/
+**/vite/
+.turbo/
+.parcel-cache/
+
+# ------------------------------------------------------------------------------
+# 3. ENVIRONMENT VARIABLES & SECRETS (Keep secret keys safe)
+# ------------------------------------------------------------------------------
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+*.env.*
+# Keep example templates committed so other developers know what variables to set:
+!.env.example
+!*/.env.example
+!**/.env.example
+
+# ------------------------------------------------------------------------------
+# 4. LOGS & DIAGNOSTICS
+# ------------------------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ------------------------------------------------------------------------------
+# 5. OS & EDITOR ARTIFACTS
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE & Editor files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ------------------------------------------------------------------------------
+# 6. TEMPORARY & TEST ARTIFACTS
+# ------------------------------------------------------------------------------
+scratch/
+*/scratch/
+.system_generated/
+coverage/
+.nyc_output/
+.eslintcache
