@@ -5,9 +5,10 @@ import { soundFx } from '../utils/soundFx.js';
 
 const SocketContext = createContext(null);
 
-const SOCKET_SERVER_URL = window.location.origin.includes(':5173')
-  ? 'http://localhost:5000'
-  : window.location.origin;
+const BACKEND_URL = (
+  import.meta.env.VITE_BACKEND_URL ||
+  'https://videoconfrenceing.onrender.com'
+).replace(/\/$/, '');
 
 export function SocketProvider({ children }) {
   const socketRef = useRef(null);
@@ -26,10 +27,11 @@ export function SocketProvider({ children }) {
 
   // Initialize Socket connection
   useEffect(() => {
-    const socket = io(SOCKET_SERVER_URL, {
+    const socket = io(BACKEND_URL, {
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      timeout: 20000
     });
 
     socketRef.current = socket;
@@ -239,7 +241,7 @@ export function SocketProvider({ children }) {
   // REST: Generate New Code Preview
   const generateNewCode = async () => {
     try {
-      const res = await fetch(`${SOCKET_SERVER_URL}/api/rooms/generate-code`);
+      const res = await fetch(`${BACKEND_URL}/api/rooms/generate-code`);
       const data = await res.json();
       return data.roomCode;
     } catch {
@@ -251,7 +253,7 @@ export function SocketProvider({ children }) {
   // REST: Create Room
   const createRoom = async ({ roomName, maxParticipants, customRoomCode = null }) => {
     try {
-      const res = await fetch(`${SOCKET_SERVER_URL}/api/rooms`, {
+      const res = await fetch(`${BACKEND_URL}/api/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomName, maxParticipants, customRoomCode })
@@ -268,7 +270,7 @@ export function SocketProvider({ children }) {
   // REST: Validate Room
   const checkRoom = async (code) => {
     try {
-      const res = await fetch(`${SOCKET_SERVER_URL}/api/rooms/${code}`);
+      const res = await fetch(`${BACKEND_URL}/api/rooms/${code}`);
       return await res.json();
     } catch {
       return { success: false, exists: false, error: 'Cannot reach Kalesh server' };

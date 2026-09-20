@@ -1,6 +1,6 @@
 import { io } from 'socket.io-client';
 
-const SERVER_URL = 'http://localhost:5000';
+const SERVER_URL = process.env.SERVER_URL || process.env.VITE_BACKEND_URL || 'https://videoconfrenceing.onrender.com';
 
 function createSocket() {
   return io(SERVER_URL, {
