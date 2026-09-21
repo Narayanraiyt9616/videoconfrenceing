@@ -172,21 +172,45 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
                       : 'bg-[#1e1e1e] border border-[#2c2c2c] text-zinc-200'
                   }`}
                 >
-                  {/* Inline Media (Image / GIF) Payload */}
+                  {/* Inline Media (Image / GIF / Video) Payload */}
                   {msg.mediaUrl && (
                     <div className="mb-2 rounded-xl overflow-hidden border border-[#333] bg-black cursor-pointer group/media">
-                      <img
-                        src={msg.mediaUrl}
-                        alt="Media"
-                        onClick={() => setZoomedMedia(msg.mediaUrl)}
-                        className="w-full max-h-56 object-contain rounded-xl hover:scale-[1.02] transition-transform"
-                      />
-                      <div className="px-2 py-1 bg-[#141414] text-[10px] text-[#ffa31a] flex items-center justify-between border-t border-[#2a2a2a]">
-                        <span className="font-extrabold uppercase">
-                          [{msg.mediaType === 'gif' ? 'GIF' : 'IMAGE'}]
-                        </span>
-                        <span className="text-zinc-500">click to expand</span>
-                      </div>
+                      {msg.mediaType === 'video' ? (
+                        <div className="relative">
+                          <video
+                            src={msg.mediaUrl}
+                            controls
+                            playsInline
+                            className="w-full max-h-56 object-contain rounded-t-xl bg-black"
+                          />
+                          <div className="px-2 py-1 bg-[#141414] text-[10px] text-red-400 flex items-center justify-between border-t border-[#2a2a2a]">
+                            <span className="font-extrabold uppercase">
+                              [5s SHORT VIDEO]
+                            </span>
+                            <span
+                              className="text-zinc-400 hover:text-white cursor-pointer"
+                              onClick={() => setZoomedMedia({ url: msg.mediaUrl, type: 'video' })}
+                            >
+                              expand ↗
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <img
+                            src={msg.mediaUrl}
+                            alt="Media"
+                            onClick={() => setZoomedMedia({ url: msg.mediaUrl, type: 'image' })}
+                            className="w-full max-h-56 object-contain rounded-t-xl hover:scale-[1.02] transition-transform"
+                          />
+                          <div className="px-2 py-1 bg-[#141414] text-[10px] text-[#ffa31a] flex items-center justify-between border-t border-[#2a2a2a]">
+                            <span className="font-extrabold uppercase">
+                              [{msg.mediaType === 'gif' ? 'GIF' : 'IMAGE'}]
+                            </span>
+                            <span className="text-zinc-500">click to expand</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -312,11 +336,27 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
           onClick={() => setZoomedMedia(null)}
           className="fixed inset-0 z-[80] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
         >
-          <div className="relative max-w-xl max-h-[85vh] rounded-2xl overflow-hidden border border-[#ffa31a]/40 bg-[#121212] shadow-2xl">
-            <img src={zoomedMedia} alt="Zoomed Media" className="w-full h-auto object-contain max-h-[80vh]" />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-2xl max-h-[85vh] rounded-2xl overflow-hidden border border-[#ffa31a]/40 bg-[#121212] shadow-2xl flex items-center justify-center p-2"
+          >
+            {zoomedMedia.type === 'video' ? (
+              <video
+                src={zoomedMedia.url}
+                controls
+                autoPlay
+                className="w-full h-auto object-contain max-h-[80vh] rounded-xl"
+              />
+            ) : (
+              <img
+                src={zoomedMedia.url || zoomedMedia}
+                alt="Zoomed Media"
+                className="w-full h-auto object-contain max-h-[80vh] rounded-xl"
+              />
+            )}
             <button
               onClick={() => setZoomedMedia(null)}
-              className="absolute top-3 right-3 p-1.5 rounded-full bg-[#181818] text-[#ffa31a] hover:text-white transition-colors"
+              className="absolute top-4 right-4 p-2 rounded-full bg-black/80 text-[#ffa31a] hover:text-white transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>

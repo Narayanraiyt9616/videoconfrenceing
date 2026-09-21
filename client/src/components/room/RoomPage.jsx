@@ -14,6 +14,8 @@ import { JoinRoomModal } from '../landing/JoinRoomModal.jsx';
 import { HostApprovalModal } from './HostApprovalModal.jsx';
 import { LeaveRequestModal } from './LeaveRequestModal.jsx';
 import { GifPickerModal } from '../chat/GifPickerModal.jsx';
+import { NotificationToastStack } from '../common/NotificationToastStack.jsx';
+import { NotificationCenterPanel } from './NotificationCenterPanel.jsx';
 import toast from 'react-hot-toast';
 
 export function RoomPage() {
@@ -24,6 +26,7 @@ export function RoomPage() {
     room,
     participant,
     leaveRoom,
+    joinRoom,
     isHost,
     messages,
     sendMediaMessage
@@ -64,27 +67,56 @@ export function RoomPage() {
     }
   }, [messages, isChatOpen, lastMessageCount]);
 
-  // Handle room presence and direct navigation
+  // Handle room presence, refresh reconnect, and direct navigation
   const wasInRoomRef = useRef(false);
+  const isReconnectingRef = useRef(false);
 
   useEffect(() => {
     if (room) {
       wasInRoomRef.current = true;
       setIsNeedJoinOpen(false);
-    } else if (wasInRoomRef.current) {
+      return;
+    }
+
+    if (wasInRoomRef.current) {
       // User was in room, but room ended or user was removed
       navigate('/');
-    } else if (roomCode) {
-      // First time hitting /room/:code directly without joining
+      return;
+    }
+
+    // If refreshing on /room/:code and has stored session, auto-reconnect seamlessly
+    const storedName = sessionStorage.getItem('kalesh_userName');
+    const storedAvatar = sessionStorage.getItem('kalesh_avatar') || '🔥';
+    const cleanCode = roomCode?.toUpperCase();
+    const storedHostToken = cleanCode ? sessionStorage.getItem(`kalesh_host_${cleanCode}`) : null;
+
+    if (cleanCode && storedName && !isReconnectingRef.current) {
+      isReconnectingRef.current = true;
+      joinRoom({
+        roomCode: cleanCode,
+        name: storedName,
+        avatar: storedAvatar,
+        isHost: Boolean(storedHostToken),
+        hostToken: storedHostToken
+      })
+        .then(() => {
+          setIsNeedJoinOpen(false);
+        })
+        .catch(() => {
+          setIsNeedJoinOpen(true);
+        });
+    } else if (cleanCode) {
+      // First time hitting /room/:code directly without session
       setIsNeedJoinOpen(true);
     }
-  }, [room, roomCode, navigate]);
+  }, [room, roomCode, joinRoom, navigate]);
 
   const handleInviteClick = () => {
-    const inviteUrl = `${window.location.origin}/join/${room?.code || roomCode}`;
+    const cleanCode = room?.code || roomCode;
+    const inviteUrl = `${window.location.origin}/join/${cleanCode}`;
     navigator.clipboard.writeText(inviteUrl);
     toast.success('Invite link copied! Send it to your friends 🔗', {
-      style: { background: '#11141e', color: '#fff', border: '1px solid rgba(255,75,31,0.3)' }
+      icon: '📋'
     });
   };
 
@@ -106,6 +138,12 @@ export function RoomPage() {
     <div className="relative w-screen h-screen overflow-hidden bg-[#0a0a0a] flex flex-col select-none">
       {/* Real-time Host Approval Notifications (Knock & Leave requests) */}
       <HostApprovalModal />
+
+      {/* 15-Second Temporary Activity / Dare / Roast Notification Toasts */}
+      <NotificationToastStack />
+
+      {/* Collapsed Slide-Over Notification & Activity Center */}
+      <NotificationCenterPanel />
 
       {/* Dynamic Top Room Navigation Bar */}
       <RoomHeader

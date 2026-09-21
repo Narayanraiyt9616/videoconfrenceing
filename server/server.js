@@ -34,7 +34,8 @@ const corsOptions = {
 const io = new Server(server, {
   cors: corsOptions,
   pingTimeout: 30000,
-  pingInterval: 10000
+  pingInterval: 10000,
+  maxHttpBufferSize: 25 * 1024 * 1024 // 25MB buffer for 5-second video sharing
 });
 
 // Middleware

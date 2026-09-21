@@ -10,9 +10,11 @@ import {
   MicOff,
   UserX,
   ChevronDown,
-  ShieldCheck
+  ShieldCheck,
+  Bell
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext.jsx';
+import { useNotifications } from '../../context/NotificationContext.jsx';
 import { soundFx } from '../../utils/soundFx.js';
 import toast from 'react-hot-toast';
 
@@ -25,6 +27,8 @@ export function RoomHeader({ onInviteClick, onLeaveClick, onEndRoomClick }) {
     hostMuteParticipant,
     hostRemoveParticipant
   } = useSocket();
+
+  const { unreadCount, togglePanel } = useNotifications();
 
   const [copiedCode, setCopiedCode] = useState(false);
   const [isSoundMuted, setIsSoundMuted] = useState(soundFx.muted);
@@ -158,6 +162,21 @@ export function RoomHeader({ onInviteClick, onLeaveClick, onEndRoomClick }) {
             </div>
           )}
         </div>
+
+        {/* Notification / Activity Center Trigger */}
+        <button
+          type="button"
+          onClick={togglePanel}
+          className="relative p-2 rounded-lg bg-[#1a1a1a] hover:bg-[#222222] border border-[#333333] text-white transition-colors cursor-pointer"
+          title="Activity & Notification Center"
+        >
+          <Bell className="w-4 h-4 text-[#ffa31a]" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#ffa31a] text-[9px] font-black text-black flex items-center justify-center border-2 border-[#0c0c0c] shadow-md animate-pulse">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </button>
 
         {/* Invite Friends Button */}
         <button

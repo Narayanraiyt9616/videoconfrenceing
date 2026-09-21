@@ -259,6 +259,9 @@ export function useWebRTC() {
             });
           } catch (camErr) {
             console.warn('[WebRTC] Real camera unavailable/blocked, using cyber matrix stream:', camErr);
+            if (camErr.name === 'NotAllowedError') {
+              toast('Camera/Mic permission blocked. Using avatar feed.', { icon: '🔒' });
+            }
             stream = createFallbackStream();
           }
         } else {
@@ -337,6 +340,21 @@ export function useWebRTC() {
     const handleOffer = async ({ from, offer }) => {
       try {
         const pc = createPeerConnection(from);
+
+        // WebRTC glare resolution: resolve simultaneous offer collisions
+        const isPolite = String(socket?.id) > String(from);
+        if (pc.signalingState !== 'stable') {
+          if (!isPolite) {
+            console.log('[WebRTC] Impolite peer ignoring offer collision with', from);
+            return;
+          }
+          try {
+            await pc.setLocalDescription({ type: 'rollback' });
+          } catch (rbErr) {
+            console.warn('[WebRTC] Rollback error:', rbErr);
+          }
+        }
+
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
         // Flush any candidates received prior to setting remote description

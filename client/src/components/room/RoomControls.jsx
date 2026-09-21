@@ -37,7 +37,7 @@ export function RoomControls({
   const [showReactionPicker, setShowReactionPicker] = useState(false);
 
   return (
-    <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center">
+    <div className="fixed bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center max-w-[98vw]">
       {/* Floating Reaction Picker Popover */}
       <AnimatePresence>
         {showReactionPicker && (
@@ -51,13 +51,13 @@ export function RoomControls({
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="flex items-center gap-1.5 sm:gap-2 p-2 rounded-2xl bg-[#141414] border border-[#2e2e2e] shadow-2xl backdrop-blur-md"
+        className="flex items-center gap-1 sm:gap-2 p-1.5 sm:p-2 rounded-2xl bg-[#141414]/95 border border-[#2e2e2e] shadow-2xl backdrop-blur-md max-w-full overflow-x-auto"
       >
         {/* 1. Mic Button */}
         <button
           type="button"
           onClick={onToggleAudio}
-          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+          className={`w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
             isAudioMuted
               ? 'bg-red-500/20 border border-red-500/40 text-red-400'
               : 'bg-[#222222] hover:bg-[#2c2c2c] border border-[#383838] text-[#ffa31a]'

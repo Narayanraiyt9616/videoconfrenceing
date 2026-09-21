@@ -38,7 +38,8 @@ class RoomStore {
       polls: [],
       currentGame: null,
       createdAt: now,
-      lastActivity: now
+      lastActivity: now,
+      emptySince: now // Room starts empty until host/participant joins
     };
 
     this.rooms.set(room.code, room);
@@ -98,6 +99,7 @@ class RoomStore {
 
     room.participants.set(socketId, participant);
     this.socketToRoom.set(socketId, room.code);
+    room.emptySince = null; // Clear empty status
     this.touch(code);
 
     return { success: true, room, participant };
@@ -136,10 +138,10 @@ class RoomStore {
     room.participants.delete(socketId);
     this.touch(code);
 
-    // If room is now empty, immediately destroy room completely
+    // If room is now empty, mark emptySince instead of instant destruction so refreshes and invite links survive
     if (room.participants.size === 0) {
-      this.deleteRoom(code);
-      return { roomCode: code, participant, roomDeleted: true, remaining: 0 };
+      room.emptySince = Date.now();
+      return { roomCode: code, participant, roomDeleted: false, remaining: 0 };
     }
 
     // If the host left, assign host to the oldest participant
@@ -239,7 +241,7 @@ class RoomStore {
       senderAvatar: isSecret ? '🤫' : senderAvatar,
       text: text ? String(text).slice(0, 500) : '',
       mediaUrl: mediaUrl || null,
-      mediaType: mediaType || null, // 'image' | 'gif'
+      mediaType: mediaType || null, // 'image' | 'gif' | 'video'
       isSecret,
       replyTo,
       reactions: {}, // emoji -> count
@@ -382,14 +384,17 @@ class RoomStore {
   }
 
   /**
-   * Watchdog: Cleanup rooms inactive for > inactivityTimeoutMs
+   * Watchdog: Cleanup rooms inactive for > inactivityTimeoutMs or empty for > emptyGraceMs
    */
-  cleanupInactiveRooms(inactivityTimeoutMs = 1800000) {
+  cleanupInactiveRooms(inactivityTimeoutMs = 1800000, emptyGraceMs = 300000) {
     const now = Date.now();
     const expiredCodes = [];
 
     for (const [code, room] of this.rooms.entries()) {
-      if (now - room.lastActivity > inactivityTimeoutMs) {
+      const isExpiredInactivity = (now - room.lastActivity > inactivityTimeoutMs);
+      const isExpiredEmpty = room.emptySince && (now - room.emptySince > emptyGraceMs);
+
+      if (isExpiredInactivity || isExpiredEmpty) {
         expiredCodes.push(code);
       }
     }

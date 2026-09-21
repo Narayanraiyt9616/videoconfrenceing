@@ -10,7 +10,11 @@ import {
   Video,
   Check,
   RefreshCw,
-  Zap
+  Zap,
+  Play,
+  Pause,
+  AlertTriangle,
+  Film
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -55,37 +59,95 @@ const CURATED_GIFS = [
 ];
 
 export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
-  const [activeTab, setActiveTab] = useState('curated'); // 'curated' | 'upload' | 'create'
+  const [activeTab, setActiveTab] = useState('curated'); // 'curated' | 'upload' | 'record'
 
   // Upload state
   const [uploadedMedia, setUploadedMedia] = useState(null);
   const [caption, setCaption] = useState('');
+  const [durationError, setDurationError] = useState('');
   const fileInputRef = useRef(null);
 
-  // Camera GIF recorder state
+  // Video preview player state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const previewVideoRef = useRef(null);
+
+  // Live camera 5s video recorder state
   const [isRecording, setIsRecording] = useState(false);
-  const [recordedGifUrl, setRecordedGifUrl] = useState(null);
-  const videoPreviewRef = useRef(null);
+  const [countdown, setCountdown] = useState(5);
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState(null);
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+  const liveVideoPreviewRef = useRef(null);
 
   useEffect(() => {
-    if (activeTab === 'create' && videoPreviewRef.current && localStream) {
-      videoPreviewRef.current.srcObject = localStream;
+    if (activeTab === 'record' && liveVideoPreviewRef.current && localStream) {
+      liveVideoPreviewRef.current.srcObject = localStream;
     }
   }, [activeTab, localStream]);
 
   if (!isOpen) return null;
 
-  // Handle any image or GIF file upload (ZERO RESTRICTIONS)
+  // Handle file upload with duration validation for videos (≤ 5 seconds)
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setDurationError('');
+
+    const isVideo = file.type.startsWith('video/');
+    const isGif = file.type.includes('gif');
+    const isImage = file.type.startsWith('image/');
+
+    if (!isVideo && !isGif && !isImage) {
+      toast.error('Unsupported file format! Please choose an image, GIF, or MP4/WebM video.');
+      return;
+    }
+
+    // If it's a video, check duration first
+    if (isVideo) {
+      const tempVideo = document.createElement('video');
+      tempVideo.preload = 'metadata';
+      tempVideo.src = URL.createObjectURL(file);
+
+      tempVideo.onloadedmetadata = () => {
+        URL.revokeObjectURL(tempVideo.src);
+        const duration = tempVideo.duration;
+
+        if (duration > 5.5) {
+          const err = `Video exceeds 5 seconds limit! (${duration.toFixed(1)}s). Please trim or select a clip under 5 seconds.`;
+          setDurationError(err);
+          toast.error(err, { duration: 5000 });
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+
+        // Duration is valid (≤ 5s)
+        const reader = new FileReader();
+        reader.onload = (uploadEvent) => {
+          setUploadedMedia({
+            dataUrl: uploadEvent.target.result,
+            name: file.name,
+            type: 'video',
+            duration: Math.round(duration)
+          });
+          toast.success(`5s Video clip loaded! Ready to share.`);
+        };
+        reader.readAsDataURL(file);
+      };
+
+      tempVideo.onerror = () => {
+        toast.error('Could not read video metadata. Please try an MP4 or WebM file.');
+      };
+      return;
+    }
+
+    // For Image or GIF
     const reader = new FileReader();
     reader.onload = (uploadEvent) => {
       setUploadedMedia({
         dataUrl: uploadEvent.target.result,
         name: file.name,
-        type: file.type.includes('gif') ? 'gif' : 'image'
+        type: isGif ? 'gif' : 'image'
       });
     };
     reader.readAsDataURL(file);
@@ -98,7 +160,7 @@ export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
       mediaType: uploadedMedia.type,
       text: caption.trim()
     });
-    toast.success(`${uploadedMedia.type === 'gif' ? 'GIF' : 'Image'} shared in chat! 🔥`);
+    toast.success(`${uploadedMedia.type.toUpperCase()} shared in chat! 🔥`);
     setUploadedMedia(null);
     setCaption('');
     onClose();
@@ -114,52 +176,76 @@ export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
     onClose();
   };
 
-  // Camera burst recorder: records canvas snapshots into animated sticker
-  const handleRecordBurst = () => {
+  // Start 5-second video recording from webcam
+  const start5sRecording = () => {
     if (!localStream) {
-      toast.error('Webcam stream not available for capture');
+      toast.error('Webcam stream not available for recording');
       return;
     }
 
+    recordedChunksRef.current = [];
     setIsRecording(true);
-    setRecordedGifUrl(null);
+    setCountdown(5);
+    setRecordedVideoUrl(null);
 
-    const video = document.createElement('video');
-    video.srcObject = localStream;
-    video.play();
-
-    const canvas = document.createElement('canvas');
-    canvas.width = 320;
-    canvas.height = 240;
-    const ctx = canvas.getContext('2d');
-
-    const frames = [];
-    let captured = 0;
-    const totalFrames = 15; // 15 frames over ~2 seconds
-
-    const interval = setInterval(() => {
-      ctx.drawImage(video, 0, 0, 320, 240);
-      frames.push(canvas.toDataURL('image/webp', 0.8));
-      captured++;
-
-      if (captured >= totalFrames) {
-        clearInterval(interval);
-        setIsRecording(false);
-        setRecordedGifUrl(frames[Math.floor(frames.length / 2)] || frames[0]);
-        toast.success('Reaction snapshot captured! 📸');
+    let mimeType = 'video/webm;codecs=vp8,opus';
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      mimeType = 'video/webm';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/mp4';
       }
-    }, 130);
+    }
+
+    try {
+      const recorder = new MediaRecorder(localStream, { mimeType });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          recordedChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setRecordedVideoUrl(reader.result);
+          setIsRecording(false);
+          toast.success('5-second video recorded! 🎥');
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      recorder.start();
+
+      // Countdown interval
+      let timeLeft = 5;
+      const timer = setInterval(() => {
+        timeLeft -= 1;
+        setCountdown(timeLeft);
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          if (recorder.state === 'recording') {
+            recorder.stop();
+          }
+        }
+      }, 1000);
+    } catch (err) {
+      setIsRecording(false);
+      toast.error('Could not record video: ' + err.message);
+    }
   };
 
-  const handleSendRecorded = () => {
-    if (!recordedGifUrl) return;
+  const handleSendRecordedVideo = () => {
+    if (!recordedVideoUrl) return;
     onSendMedia({
-      mediaUrl: recordedGifUrl,
-      mediaType: 'gif',
-      text: caption.trim() || 'Live Camera Reaction 📸🔥'
+      mediaUrl: recordedVideoUrl,
+      mediaType: 'video',
+      text: caption.trim() || '5s Camera Reaction 🎥🔥'
     });
-    toast.success('Reaction shared in chat! 🔥');
-    setRecordedGifUrl(null);
+    toast.success('Short video shared in chat! 🔥');
+    setRecordedVideoUrl(null);
     onClose();
   };
 
@@ -178,8 +264,8 @@ export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-white">SHARE GIF & MEDIA</h3>
-              <p className="text-[11px] text-zinc-400">Zero file restrictions • Ephemeral in RAM</p>
+              <h3 className="text-base font-extrabold text-white">SHARE GIF, MEME & VIDEO</h3>
+              <p className="text-[11px] text-zinc-400">Up to 5-sec clips • Ephemeral in RAM</p>
             </div>
           </div>
           <button
@@ -215,20 +301,20 @@ export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
             }`}
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Upload File</span>
+            <span>Upload Media</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab('create')}
+            onClick={() => setActiveTab('record')}
             className={`py-2 px-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              activeTab === 'create'
+              activeTab === 'record'
                 ? 'bg-[#ffa31a] text-black font-extrabold shadow-md'
                 : 'text-zinc-400 hover:text-white bg-[#202020]'
             }`}
           >
             <Camera className="w-3.5 h-3.5" />
-            <span>Live Camera</span>
+            <span>Record 5s Video</span>
           </button>
         </div>
 
@@ -238,7 +324,7 @@ export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
           {activeTab === 'curated' && (
             <div>
               <p className="text-xs text-zinc-400 mb-3">
-                Click any reaction to immediately drop it in chat:
+                Click any reaction to immediately send it to the room:
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 {CURATED_GIFS.map((gif, index) => (
@@ -265,13 +351,13 @@ export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
             </div>
           )}
 
-          {/* TAB 2: UPLOAD ANY IMAGE OR GIF */}
+          {/* TAB 2: UPLOAD IMAGE, GIF, OR 5-SECOND VIDEO */}
           {activeTab === 'upload' && (
             <div className="space-y-4">
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*,.gif,.png,.jpg,.jpeg,.webp,.svg"
+                accept="image/*,.gif,.png,.jpg,.jpeg,.webp,video/mp4,video/webm,video/ogg,video/quicktime"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -282,30 +368,58 @@ export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
                   className="border-2 border-dashed border-[#333] hover:border-[#ffa31a] rounded-2xl p-8 text-center cursor-pointer transition-all hover:bg-[#1a1a1a] flex flex-col items-center justify-center"
                 >
                   <div className="w-14 h-14 rounded-2xl bg-[#ffa31a]/15 border border-[#ffa31a]/30 flex items-center justify-center text-[#ffa31a] mb-3">
-                    <Upload className="w-6 h-6" />
+                    <Film className="w-6 h-6" />
                   </div>
                   <h4 className="text-sm font-bold text-white mb-1">
-                    Upload Any Image or GIF
+                    Upload Photo, GIF, or Short Video
                   </h4>
-                  <p className="text-xs text-zinc-400 max-w-xs mb-3">
-                    Supports GIF, PNG, JPG, WEBP, SVG. No upload restrictions.
+                  <p className="text-xs text-zinc-400 max-w-xs mb-2 leading-relaxed">
+                    Upload GIF, PNG, JPG, or a short video clip up to <strong>5 seconds</strong> (MP4 / WebM).
                   </p>
                   <span className="px-4 py-1.5 rounded-lg bg-[#222] hover:bg-[#2a2a2a] text-xs font-bold text-[#ffa31a] border border-[#ffa31a]/30">
                     Browse Files
                   </span>
+
+                  {durationError && (
+                    <div className="mt-4 p-2.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{durationError}</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="relative rounded-xl overflow-hidden border border-[#2e2e2e] max-h-56 bg-black flex items-center justify-center">
-                    <img
-                      src={uploadedMedia.dataUrl}
-                      alt="Preview"
-                      className="max-h-56 w-auto object-contain"
-                    />
+                  <div className="relative rounded-xl overflow-hidden border border-[#2e2e2e] max-h-60 bg-black flex items-center justify-center">
+                    {uploadedMedia.type === 'video' ? (
+                      <div className="relative w-full aspect-video flex items-center justify-center bg-black">
+                        <video
+                          ref={previewVideoRef}
+                          src={uploadedMedia.dataUrl}
+                          controls
+                          autoPlay
+                          loop
+                          className="max-h-56 w-auto object-contain"
+                        />
+                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-black uppercase">
+                          VIDEO ({uploadedMedia.duration}s)
+                        </span>
+                      </div>
+                    ) : (
+                      <img
+                        src={uploadedMedia.dataUrl}
+                        alt="Preview"
+                        className="max-h-56 w-auto object-contain"
+                      />
+                    )}
                     <button
                       type="button"
-                      onClick={() => setUploadedMedia(null)}
-                      className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-red-600 transition-colors"
+                      onClick={() => {
+                        setUploadedMedia(null);
+                        setDurationError('');
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-red-600 transition-colors cursor-pointer"
+                      title="Remove media"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -325,30 +439,32 @@ export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
                     className="w-full py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider bg-[#ffa31a] hover:bg-[#ff9000] text-black flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-colors"
                   >
                     <Send className="w-4 h-4" />
-                    <span>SEND TO ROOM</span>
+                    <span>SHARE {uploadedMedia.type.toUpperCase()} WITH ROOM</span>
                   </button>
                 </div>
               )}
             </div>
           )}
 
-          {/* TAB 3: CREATE LIVE CAMERA GIF STICKER */}
-          {activeTab === 'create' && (
+          {/* TAB 3: RECORD 5-SECOND LIVE VIDEO */}
+          {activeTab === 'record' && (
             <div className="space-y-4 text-center">
               <p className="text-xs text-zinc-400">
-                Record a 2-second live reaction from your webcam!
+                Record a quick 5-second video reaction directly with your camera!
               </p>
 
-              <div className="relative rounded-xl overflow-hidden border border-[#2e2e2e] bg-black aspect-video max-w-sm mx-auto flex items-center justify-center">
-                {recordedGifUrl ? (
-                  <img
-                    src={recordedGifUrl}
-                    alt="Recorded Reaction"
+              <div className="relative rounded-2xl overflow-hidden border border-[#2e2e2e] bg-black aspect-video max-w-sm mx-auto flex items-center justify-center shadow-lg">
+                {recordedVideoUrl ? (
+                  <video
+                    src={recordedVideoUrl}
+                    controls
+                    autoPlay
+                    loop
                     className="w-full h-full object-cover scale-x-[-1]"
                   />
                 ) : (
                   <video
-                    ref={videoPreviewRef}
+                    ref={liveVideoPreviewRef}
                     autoPlay
                     playsInline
                     muted
@@ -357,20 +473,23 @@ export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
                 )}
 
                 {isRecording && (
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#ffa31a] text-black font-extrabold text-xs shadow-lg">
-                      <span className="w-2 h-2 rounded-full bg-black animate-ping" />
-                      <span>RECORDING (2 SEC)...</span>
+                  <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-2">
+                    <div className="w-16 h-16 rounded-full border-4 border-[#ffa31a] flex items-center justify-center text-2xl font-black text-[#ffa31a] animate-pulse">
+                      {countdown}s
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white font-extrabold text-xs shadow-lg">
+                      <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                      <span>RECORDING VIDEO...</span>
                     </div>
                   </div>
                 )}
               </div>
 
-              {recordedGifUrl ? (
+              {recordedVideoUrl ? (
                 <div className="space-y-3 max-w-sm mx-auto">
                   <input
                     type="text"
-                    placeholder="Reaction caption (e.g. My honest reaction)..."
+                    placeholder="Add caption for video reaction..."
                     value={caption}
                     onChange={(e) => setCaption(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-xl bg-[#121212] border border-[#2e2e2e] text-xs text-white focus:outline-none focus:border-[#ffa31a]"
@@ -379,18 +498,18 @@ export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => setRecordedGifUrl(null)}
-                      className="flex-1 py-2.5 rounded-xl bg-[#222] hover:bg-[#2a2a2a] text-zinc-300 font-bold text-xs transition-colors"
+                      onClick={() => setRecordedVideoUrl(null)}
+                      className="flex-1 py-2.5 rounded-xl bg-[#222] hover:bg-[#2a2a2a] text-zinc-300 font-bold text-xs transition-colors cursor-pointer"
                     >
                       Retake
                     </button>
                     <button
                       type="button"
-                      onClick={handleSendRecorded}
-                      className="flex-1 py-2.5 rounded-xl bg-[#ffa31a] hover:bg-[#ff9000] text-black font-extrabold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                      onClick={handleSendRecordedVideo}
+                      className="flex-1 py-2.5 rounded-xl bg-[#ffa31a] hover:bg-[#ff9000] text-black font-extrabold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-md"
                     >
                       <Send className="w-3.5 h-3.5" />
-                      <span>SEND REACTION</span>
+                      <span>SEND VIDEO</span>
                     </button>
                   </div>
                 </div>
@@ -398,11 +517,11 @@ export function GifPickerModal({ isOpen, onClose, onSendMedia, localStream }) {
                 <button
                   type="button"
                   disabled={isRecording}
-                  onClick={handleRecordBurst}
-                  className="px-6 py-3 rounded-xl bg-[#ffa31a] hover:bg-[#ff9000] text-black font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 mx-auto cursor-pointer shadow-lg transition-colors"
+                  onClick={start5sRecording}
+                  className="px-6 py-3.5 rounded-xl bg-[#ffa31a] hover:bg-[#ff9000] text-black font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 mx-auto cursor-pointer shadow-lg shadow-[#ffa31a]/25 transition-all disabled:opacity-50"
                 >
-                  <Camera className="w-4 h-4 text-black" />
-                  <span>RECORD 2-SEC GIF</span>
+                  <Video className="w-4 h-4 text-black" />
+                  <span>START 5-SECOND RECORDING</span>
                 </button>
               )}
             </div>
