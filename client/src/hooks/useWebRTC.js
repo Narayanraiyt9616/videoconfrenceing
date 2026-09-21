@@ -24,6 +24,8 @@ export function useWebRTC() {
   const screenStreamRef = useRef(null);
   const peersRef = useRef(new Map()); // peerSocketId -> RTCPeerConnection
   const iceCandidateQueueRef = useRef(new Map()); // peerSocketId -> RTCIceCandidate[]
+  const isAudioMutedRef = useRef(false);
+  const isVideoOffRef = useRef(false);
 
   // Helper to create a fallback dummy animated video & silent audio stream if hardware camera is not available
   const createFallbackStream = useCallback(() => {
@@ -139,6 +141,11 @@ export function useWebRTC() {
         if (localStreamRef.current) {
           const senders = existingPc.getSenders();
           localStreamRef.current.getTracks().forEach((track) => {
+            if (track.kind === 'audio') {
+              track.enabled = !isAudioMutedRef.current;
+            } else if (track.kind === 'video') {
+              track.enabled = !isVideoOffRef.current;
+            }
             const hasTrack = senders.some((s) => s.track && s.track.kind === track.kind);
             if (!hasTrack) {
               existingPc.addTrack(track, localStreamRef.current);
@@ -153,6 +160,11 @@ export function useWebRTC() {
       // Add local media tracks
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => {
+          if (track.kind === 'audio') {
+            track.enabled = !isAudioMutedRef.current;
+          } else if (track.kind === 'video') {
+            track.enabled = !isVideoOffRef.current;
+          }
           pc.addTrack(track, localStreamRef.current);
         });
       }
@@ -220,6 +232,11 @@ export function useWebRTC() {
         if (localStreamRef.current) {
           const senders = pc.getSenders();
           localStreamRef.current.getTracks().forEach((track) => {
+            if (track.kind === 'audio') {
+              track.enabled = !isAudioMutedRef.current;
+            } else if (track.kind === 'video') {
+              track.enabled = !isVideoOffRef.current;
+            }
             const hasTrack = senders.some((s) => s.track && s.track.kind === track.kind);
             if (!hasTrack) {
               pc.addTrack(track, localStreamRef.current);
@@ -274,12 +291,29 @@ export function useWebRTC() {
           return;
         }
 
+        // Apply any pre-existing mute or camera off states to captured stream immediately
+        if (isAudioMutedRef.current) {
+          stream.getAudioTracks().forEach((track) => {
+            track.enabled = false;
+          });
+        }
+        if (isVideoOffRef.current) {
+          stream.getVideoTracks().forEach((track) => {
+            track.enabled = false;
+          });
+        }
+
         localStreamRef.current = stream;
         setLocalStream(stream);
 
         // Attach new tracks to any peer connections that were already opened
         peersRef.current.forEach(async (pc, peerId) => {
           stream.getTracks().forEach((track) => {
+            if (track.kind === 'audio') {
+              track.enabled = !isAudioMutedRef.current;
+            } else if (track.kind === 'video') {
+              track.enabled = !isVideoOffRef.current;
+            }
             const senders = pc.getSenders();
             const hasTrack = senders.some((s) => s.track && s.track.kind === track.kind);
             if (!hasTrack) {
@@ -364,6 +398,11 @@ export function useWebRTC() {
         if (localStreamRef.current) {
           const senders = pc.getSenders();
           localStreamRef.current.getTracks().forEach((track) => {
+            if (track.kind === 'audio') {
+              track.enabled = !isAudioMutedRef.current;
+            } else if (track.kind === 'video') {
+              track.enabled = !isVideoOffRef.current;
+            }
             const hasTrack = senders.some((s) => s.track && s.track.kind === track.kind);
             if (!hasTrack) {
               pc.addTrack(track, localStreamRef.current);
@@ -448,29 +487,91 @@ export function useWebRTC() {
 
   // Media Controls: Toggle Microphone
   const toggleAudio = useCallback(() => {
+    const nextMuted = !isAudioMutedRef.current;
+    isAudioMutedRef.current = nextMuted;
+    setIsAudioMuted(nextMuted);
+
+    // 1. Mute/unmute localStreamRef tracks
     if (localStreamRef.current) {
-      const audioTracks = localStreamRef.current.getAudioTracks();
-      const nextMuted = !isAudioMuted;
-      audioTracks.forEach((track) => {
+      localStreamRef.current.getAudioTracks().forEach((track) => {
         track.enabled = !nextMuted;
       });
-      setIsAudioMuted(nextMuted);
-      updateMediaState({ isMuted: nextMuted });
     }
-  }, [isAudioMuted, updateMediaState]);
+
+    // 2. Mute/unmute localStream state tracks if different
+    if (localStream) {
+      localStream.getAudioTracks().forEach((track) => {
+        track.enabled = !nextMuted;
+      });
+    }
+
+    // 3. Mute/unmute audio senders across all active RTCPeerConnections
+    peersRef.current.forEach((pc) => {
+      pc.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === 'audio') {
+          sender.track.enabled = !nextMuted;
+        }
+      });
+    });
+
+    // 4. Update room media state
+    updateMediaState({ isMuted: nextMuted });
+  }, [localStream, updateMediaState]);
 
   // Media Controls: Toggle Camera
   const toggleVideo = useCallback(() => {
+    const nextCameraOff = !isVideoOffRef.current;
+    isVideoOffRef.current = nextCameraOff;
+    setIsVideoOff(nextCameraOff);
+
     if (localStreamRef.current) {
-      const videoTracks = localStreamRef.current.getVideoTracks();
-      const nextCameraOff = !isVideoOff;
-      videoTracks.forEach((track) => {
+      localStreamRef.current.getVideoTracks().forEach((track) => {
         track.enabled = !nextCameraOff;
       });
-      setIsVideoOff(nextCameraOff);
-      updateMediaState({ isCameraOff: nextCameraOff });
     }
-  }, [isVideoOff, updateMediaState]);
+
+    if (localStream) {
+      localStream.getVideoTracks().forEach((track) => {
+        track.enabled = !nextCameraOff;
+      });
+    }
+
+    peersRef.current.forEach((pc) => {
+      pc.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === 'video') {
+          sender.track.enabled = !nextCameraOff;
+        }
+      });
+    });
+
+    updateMediaState({ isCameraOff: nextCameraOff });
+  }, [localStream, updateMediaState]);
+
+  // Handle host force mute if participant state gets isMuted: true
+  useEffect(() => {
+    if (participant?.isMuted && !isAudioMutedRef.current) {
+      isAudioMutedRef.current = true;
+      setIsAudioMuted(true);
+
+      if (localStreamRef.current) {
+        localStreamRef.current.getAudioTracks().forEach((track) => {
+          track.enabled = false;
+        });
+      }
+      if (localStream) {
+        localStream.getAudioTracks().forEach((track) => {
+          track.enabled = false;
+        });
+      }
+      peersRef.current.forEach((pc) => {
+        pc.getSenders().forEach((sender) => {
+          if (sender.track && sender.track.kind === 'audio') {
+            sender.track.enabled = false;
+          }
+        });
+      });
+    }
+  }, [participant?.isMuted, localStream]);
 
   // Media Controls: Screen Share
   const toggleScreenShare = useCallback(async () => {
@@ -519,6 +620,9 @@ export function useWebRTC() {
     // Restore original local camera track
     if (localStreamRef.current) {
       const originalVideoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (originalVideoTrack) {
+        originalVideoTrack.enabled = !isVideoOffRef.current;
+      }
       peersRef.current.forEach((pc) => {
         const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
         if (sender && originalVideoTrack) {

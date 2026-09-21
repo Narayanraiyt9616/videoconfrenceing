@@ -31,7 +31,8 @@ export function VideoGrid({
   const { activeSpeakerId, isSpeakingMap, hasActiveSpeaker } = useActiveSpeaker({
     localStream,
     remoteStreams,
-    isAudioMuted
+    isAudioMuted,
+    participants
   });
 
   // Track container dimensions with ResizeObserver for exact mathematical grid fitting
@@ -305,10 +306,10 @@ export function VideoGrid({
                     stream={p.stream}
                     participant={p.participant}
                     isLocal={p.isLocal}
-                    isMuted={p.isLocal ? isAudioMuted : p.participant.isMuted}
-                    isCameraOff={p.isLocal ? isVideoOff : p.participant.isCameraOff}
+                    isMuted={p.isLocal ? isAudioMuted : p.participant?.isMuted}
+                    isCameraOff={p.isLocal ? isVideoOff : p.participant?.isCameraOff}
                     isScreenSharing={
-                      p.isLocal ? isScreenSharing : p.participant.isScreenSharing
+                      p.isLocal ? isScreenSharing : p.participant?.isScreenSharing
                     }
                     isSpeaking={isSpeaking}
                   />

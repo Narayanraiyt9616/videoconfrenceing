@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from 'react';
  * Uses volume thresholds and debounce/hysteresis (hold time) to ensure smooth transitions
  * without rapid switching between participants.
  */
-export function useActiveSpeaker({ localStream, remoteStreams, isAudioMuted }) {
+export function useActiveSpeaker({ localStream, remoteStreams, isAudioMuted, participants = [] }) {
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
   const [isSpeakingMap, setIsSpeakingMap] = useState({});
 
@@ -51,6 +51,11 @@ export function useActiveSpeaker({ localStream, remoteStreams, isAudioMuted }) {
     const currentMap = analyzersRef.current;
     const activeIds = new Set();
 
+    const mutedPeerIds = new Set();
+    participants.forEach((p) => {
+      if (p.isMuted) mutedPeerIds.add(p.id);
+    });
+
     // 1. Local stream setup
     if (localStream && !isAudioMuted) {
       const audioTracks = localStream.getAudioTracks();
@@ -74,9 +79,9 @@ export function useActiveSpeaker({ localStream, remoteStreams, isAudioMuted }) {
     // 2. Remote streams setup
     if (remoteStreams && remoteStreams.size > 0) {
       remoteStreams.forEach((stream, peerId) => {
-        if (!stream) return;
+        if (!stream || mutedPeerIds.has(peerId)) return;
         const audioTracks = stream.getAudioTracks();
-        if (audioTracks.length > 0) {
+        if (audioTracks.length > 0 && audioTracks.some((t) => t.enabled)) {
           activeIds.add(peerId);
           if (!currentMap.has(peerId)) {
             try {
@@ -103,7 +108,12 @@ export function useActiveSpeaker({ localStream, remoteStreams, isAudioMuted }) {
         currentMap.delete(id);
       }
     }
-  }, [localStream, remoteStreams, isAudioMuted]);
+  }, [localStream, remoteStreams, isAudioMuted, participants]);
+
+  const isAudioMutedRef = useRef(isAudioMuted);
+  isAudioMutedRef.current = isAudioMuted;
+  const participantsRef = useRef(participants);
+  participantsRef.current = participants;
 
   // Audio level polling loop using requestAnimationFrame
   useEffect(() => {
@@ -120,9 +130,23 @@ export function useActiveSpeaker({ localStream, remoteStreams, isAudioMuted }) {
       let maxVol = 0;
       let loudestSpeakerId = null;
 
+      const mutedPeerIds = new Set();
+      (participantsRef.current || []).forEach((p) => {
+        if (p.isMuted) mutedPeerIds.add(p.id);
+      });
+
       const buffer = new Uint8Array(256);
 
       currentMap.forEach(({ analyser }, id) => {
+        if (id === 'local' && isAudioMutedRef.current) {
+          nextSpeakingMap[id] = false;
+          return;
+        }
+        if (mutedPeerIds.has(id)) {
+          nextSpeakingMap[id] = false;
+          return;
+        }
+
         try {
           analyser.getByteFrequencyData(buffer);
           let sum = 0;
@@ -158,10 +182,18 @@ export function useActiveSpeaker({ localStream, remoteStreams, isAudioMuted }) {
         currentSpeakerRef.current = loudestSpeakerId;
         setActiveSpeakerId(loudestSpeakerId);
       } else if (currentSpeakerRef.current) {
-        const lastSpoke = lastSpokeTimeRef.current.get(currentSpeakerRef.current) || 0;
-        if (now - lastSpoke > HOLD_TIME_MS) {
+        if (
+          (currentSpeakerRef.current === 'local' && isAudioMutedRef.current) ||
+          mutedPeerIds.has(currentSpeakerRef.current)
+        ) {
           currentSpeakerRef.current = null;
           setActiveSpeakerId(null);
+        } else {
+          const lastSpoke = lastSpokeTimeRef.current.get(currentSpeakerRef.current) || 0;
+          if (now - lastSpoke > HOLD_TIME_MS) {
+            currentSpeakerRef.current = null;
+            setActiveSpeakerId(null);
+          }
         }
       }
 

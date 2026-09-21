@@ -13,18 +13,42 @@ export const VideoCard = memo(function VideoCard({
   isFeatured = false
 }) {
   const videoRef = useRef(null);
+  const shouldMute = Boolean(isLocal || isMuted);
+  const isActuallySpeaking = Boolean(isSpeaking && !isMuted);
 
   // Bind media stream to HTML <video> tag & ensure playback
   useEffect(() => {
     const videoEl = videoRef.current;
-    if (videoEl && stream) {
-      videoEl.srcObject = stream;
+    if (!videoEl) return;
+
+    videoEl.muted = shouldMute;
+
+    if (stream) {
+      if (videoEl.srcObject !== stream) {
+        videoEl.srcObject = stream;
+      }
       videoEl.play().catch((err) => {
         // Autoplay may need user gesture
         console.warn('[VideoCard] Autoplay interrupted:', err);
       });
     }
-  }, [stream]);
+  }, [stream, shouldMute]);
+
+  // Dynamically ensure HTML video element muted property strictly tracks shouldMute
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = shouldMute;
+    }
+  }, [shouldMute]);
+
+  // For remote streams, also explicitly enable/disable audio tracks based on isMuted state
+  useEffect(() => {
+    if (!isLocal && stream) {
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = !isMuted;
+      });
+    }
+  }, [isLocal, stream, isMuted]);
 
   return (
     <motion.div
@@ -34,7 +58,7 @@ export const VideoCard = memo(function VideoCard({
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.2 }}
       className={`relative w-full h-full rounded-2xl overflow-hidden bg-[#121212] border transition-all duration-300 flex items-center justify-center select-none shadow-lg ${
-        isSpeaking
+        isActuallySpeaking
           ? 'border-[#ffa31a] shadow-[0_0_25px_rgba(255,163,26,0.4)] ring-2 ring-[#ffa31a]'
           : 'border-[#262626] hover:border-[#3a3a3a]'
       } ${isFeatured ? 'ring-2 ring-[#ffa31a]/60' : ''}`}
@@ -44,7 +68,7 @@ export const VideoCard = memo(function VideoCard({
         ref={videoRef}
         autoPlay
         playsInline
-        muted={isLocal}
+        muted={shouldMute}
         className={`w-full h-full object-cover transition-opacity duration-300 ${
           isLocal && !isScreenSharing ? 'scale-x-[-1]' : ''
         } ${isCameraOff ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
