@@ -46,14 +46,28 @@ class RoomStore {
     return { room, hostToken };
   }
 
+  _normalize(code) {
+    if (!code || typeof code !== 'string') return '';
+    let clean = code.trim().toUpperCase();
+    if (/^KAL[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/i.test(clean)) {
+      return `KAL-${clean.slice(3)}`;
+    }
+    if (/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/i.test(clean)) {
+      return `KAL-${clean}`;
+    }
+    return clean;
+  }
+
   getRoom(code) {
     if (!code) return null;
-    return this.rooms.get(code.toUpperCase()) || null;
+    const clean = this._normalize(code);
+    return this.rooms.get(clean) || null;
   }
 
   hasRoom(code) {
     if (!code) return false;
-    return this.rooms.has(code.toUpperCase());
+    const clean = this._normalize(code);
+    return this.rooms.has(clean);
   }
 
   touch(code) {
@@ -386,7 +400,7 @@ class RoomStore {
   /**
    * Watchdog: Cleanup rooms inactive for > inactivityTimeoutMs or empty for > emptyGraceMs
    */
-  cleanupInactiveRooms(inactivityTimeoutMs = 1800000, emptyGraceMs = 300000) {
+  cleanupInactiveRooms(inactivityTimeoutMs = 3600000, emptyGraceMs = 1800000) {
     const now = Date.now();
     const expiredCodes = [];
 

@@ -1,6 +1,6 @@
 import express from 'express';
 import { roomStore } from '../memory/roomStore.js';
-import { generateRoomCode, isValidRoomCode } from '../utils/codeGenerator.js';
+import { generateRoomCode, isValidRoomCode, normalizeRoomCode } from '../utils/codeGenerator.js';
 
 const router = express.Router();
 
@@ -20,8 +20,8 @@ router.get('/generate-code', (req, res) => {
 router.post('/', (req, res) => {
   const { roomName, maxParticipants, customRoomCode } = req.body || {};
 
-  const roomCode = (customRoomCode && isValidRoomCode(customRoomCode.toUpperCase()))
-    ? customRoomCode.toUpperCase()
+  const roomCode = (customRoomCode && isValidRoomCode(customRoomCode))
+    ? normalizeRoomCode(customRoomCode)
     : generateRoomCode();
 
   const { room, hostToken } = roomStore.createRoom({
@@ -45,7 +45,7 @@ router.post('/', (req, res) => {
  * Validate room existence and capacity before joining
  */
 router.get('/:code', (req, res) => {
-  const code = req.params.code?.toUpperCase();
+  const code = normalizeRoomCode(req.params.code);
 
   if (!isValidRoomCode(code)) {
     return res.status(400).json({
@@ -63,6 +63,9 @@ router.get('/:code', (req, res) => {
       error: 'Room not found or has already expired and destroyed.'
     });
   }
+
+  // Keep room alive while participants are checking/joining
+  roomStore.touch(code);
 
   res.json({
     success: true,
@@ -83,7 +86,7 @@ router.get('/:code', (req, res) => {
  * Host manual destruction of room
  */
 router.delete('/:code', (req, res) => {
-  const code = req.params.code?.toUpperCase();
+  const code = normalizeRoomCode(req.params.code);
   const hostToken = req.headers['x-host-token'];
 
   const room = roomStore.getRoom(code);

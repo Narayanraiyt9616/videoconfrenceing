@@ -1,5 +1,5 @@
 /**
- * Unique Room Code Generator
+ * Unique Room Code Generator & Normalizer
  * Format: KAL-XXXX (e.g. KAL-8X92)
  */
 
@@ -23,7 +23,35 @@ export function generateRoomCode() {
   return code;
 }
 
+export function normalizeRoomCode(input) {
+  if (!input || typeof input !== 'string') return '';
+  let clean = input.trim().toUpperCase();
+
+  // If a full URL was passed (e.g. https://domain.com/join/KAL-8X92 or /room/KAL-8X92)
+  const urlMatch = clean.match(/(?:JOIN|ROOM)\/([A-Z0-9-]+)/i) || clean.match(/(?:JOIN|ROOM|CODE)=([A-Z0-9-]+)/i);
+  if (urlMatch && urlMatch[1]) {
+    clean = urlMatch[1].trim().toUpperCase();
+  }
+
+  // Remove query params or hash
+  clean = clean.split(/[?#&]/)[0];
+
+  // Remove non-alphanumerics except hyphen
+  clean = clean.replace(/[^A-Z0-9-]/g, '');
+
+  // If user typed without hyphen: e.g. "KAL8X92"
+  if (/^KAL[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/i.test(clean)) {
+    clean = `KAL-${clean.slice(3)}`;
+  }
+  // If user typed only the 4-character suffix: e.g. "8X92"
+  else if (/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/i.test(clean)) {
+    clean = `KAL-${clean}`;
+  }
+
+  return clean;
+}
+
 export function isValidRoomCode(code) {
-  if (!code || typeof code !== 'string') return false;
-  return /^KAL-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/i.test(code.trim());
+  const normalized = normalizeRoomCode(code);
+  return /^KAL-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/i.test(normalized);
 }

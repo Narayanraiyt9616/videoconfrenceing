@@ -14,8 +14,9 @@ dotenv.config();
 
 const PORT = process.env.PORT || 5000;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
-const INACTIVITY_TIMEOUT_MS = parseInt(process.env.INACTIVITY_TIMEOUT_MS) || 30 * 60 * 1000; // 30 minutes
-const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MS) || 30 * 1000; // 30 seconds
+const INACTIVITY_TIMEOUT_MS = parseInt(process.env.INACTIVITY_TIMEOUT_MS) || 60 * 60 * 1000; // 60 minutes
+const EMPTY_ROOM_GRACE_MS = parseInt(process.env.EMPTY_ROOM_GRACE_MS) || 30 * 60 * 1000; // 30 minutes
+const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MS) || 60 * 1000; // 60 seconds
 
 const app = express();
 const server = http.createServer(app);
@@ -53,7 +54,7 @@ initializeSockets(io);
 
 // Inactive Room Watchdog
 const cleanupTimer = setInterval(() => {
-  const destroyed = roomStore.cleanupInactiveRooms(INACTIVITY_TIMEOUT_MS);
+  const destroyed = roomStore.cleanupInactiveRooms(INACTIVITY_TIMEOUT_MS, EMPTY_ROOM_GRACE_MS);
   if (destroyed.length > 0) {
     console.log(`[Watchdog] Cleaned up ${destroyed.length} inactive room(s): ${destroyed.join(', ')}`);
   }

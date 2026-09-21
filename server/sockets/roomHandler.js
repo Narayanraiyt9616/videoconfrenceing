@@ -3,11 +3,12 @@
  */
 
 import { roomStore } from '../memory/roomStore.js';
+import { normalizeRoomCode } from '../utils/codeGenerator.js';
 
 export function registerRoomHandlers(io, socket) {
   // Join temporary room
   socket.on('room:join', ({ roomCode, name, avatar, isHost = false, hostToken = null }, callback) => {
-    const code = roomCode?.toUpperCase();
+    const code = normalizeRoomCode(roomCode);
     if (!code) {
       return callback?.({ success: false, error: 'Room code is required' });
     }
@@ -87,7 +88,7 @@ export function registerRoomHandlers(io, socket) {
 
   // Door Knocking: Peer requests to join room
   socket.on('room:knock', ({ roomCode, name, avatar }, callback) => {
-    const code = roomCode?.toUpperCase();
+    const code = normalizeRoomCode(roomCode);
     if (!code) {
       return callback?.({ success: false, error: 'Room code is required' });
     }
@@ -96,6 +97,9 @@ export function registerRoomHandlers(io, socket) {
     if (!room) {
       return callback?.({ success: false, error: 'Room not found or has expired! 💀' });
     }
+
+    // Touch room to keep alive while waiting for host response
+    roomStore.touch(code);
 
     if (room.participants.size >= room.maxParticipants) {
       return callback?.({ success: false, error: 'Room is full! Max limit reached.' });

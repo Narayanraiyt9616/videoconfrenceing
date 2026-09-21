@@ -1,25 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import { AnimatedBackground } from './AnimatedBackground.jsx';
 import { HeroSection } from './HeroSection.jsx';
 import { CreateRoomModal } from './CreateRoomModal.jsx';
 import { JoinRoomModal } from './JoinRoomModal.jsx';
+import { normalizeRoomCode } from '../../utils/roomUtils.js';
 
 export function LandingPage() {
   const navigate = useNavigate();
   const { roomCode } = useParams();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isJoinOpen, setIsJoinOpen] = useState(false);
   const [initialJoinCode, setInitialJoinCode] = useState('');
 
-  // Auto-open Join modal if user arrived via invite link (/join/:roomCode)
+  // Auto-open Join modal if user arrived via invite link (/join/:roomCode, ?join=..., #join=...)
   useEffect(() => {
-    if (roomCode) {
-      setInitialJoinCode(roomCode);
-      setIsJoinOpen(true);
+    const queryCode = searchParams.get('join') || searchParams.get('room') || searchParams.get('code');
+    const hashMatch = location.hash ? location.hash.replace(/^#/, '').match(/(?:join=|room=)?([A-Z0-9-]+)/i) : null;
+    const rawCandidate = roomCode || queryCode || (hashMatch ? hashMatch[1] : null);
+
+    if (rawCandidate) {
+      const normalized = normalizeRoomCode(rawCandidate);
+      if (normalized) {
+        setInitialJoinCode(normalized);
+        setIsJoinOpen(true);
+      }
     }
-  }, [roomCode]);
+  }, [roomCode, searchParams, location.hash]);
 
   const handleRoomReady = (code) => {
     navigate(`/room/${code}`);

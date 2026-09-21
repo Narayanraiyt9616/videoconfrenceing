@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef, useCallb
 import { io } from 'socket.io-client';
 import toast from 'react-hot-toast';
 import { soundFx } from '../utils/soundFx.js';
+import { normalizeRoomCode } from '../utils/roomUtils.js';
 
 const SocketContext = createContext(null);
 
@@ -269,11 +270,24 @@ export function SocketProvider({ children }) {
 
   // REST: Validate Room
   const checkRoom = async (code) => {
+    const cleanCode = normalizeRoomCode(code);
+    if (!cleanCode) {
+      return { success: false, exists: false, error: 'Please enter a room code.' };
+    }
+
     try {
-      const res = await fetch(`${BACKEND_URL}/api/rooms/${code}`);
+      const res = await fetch(`${BACKEND_URL}/api/rooms/${cleanCode}`);
+      if (res.status === 404) {
+        return { success: false, exists: false, notFound: true, error: 'Room not found or has expired.' };
+      }
       return await res.json();
     } catch {
-      return { success: false, exists: false, error: 'Cannot reach Kalesh server' };
+      return {
+        success: false,
+        exists: false,
+        unreachable: true,
+        error: 'Kalesh server is waking up on Render. Please wait a moment...'
+      };
     }
   };
 
@@ -283,9 +297,10 @@ export function SocketProvider({ children }) {
       return new Promise((resolve, reject) => {
         if (!socketRef.current) return reject(new Error('Socket not connected'));
 
+        const cleanCode = normalizeRoomCode(roomCode);
         socketRef.current.emit(
           'room:join',
-          { roomCode, name, avatar, isHost, hostToken },
+          { roomCode: cleanCode, name, avatar, isHost, hostToken },
           (response) => {
             if (!response?.success) {
               toast.error(response?.error || 'Join room failed');
@@ -410,7 +425,8 @@ export function SocketProvider({ children }) {
     return new Promise((resolve, reject) => {
       if (!socketRef.current) return reject(new Error('Socket not connected'));
 
-      socketRef.current.emit('room:knock', { roomCode, name, avatar }, (res) => {
+      const cleanCode = normalizeRoomCode(roomCode);
+      socketRef.current.emit('room:knock', { roomCode: cleanCode, name, avatar }, (res) => {
         if (!res?.success) {
           return reject(new Error(res?.error || 'Knock failed'));
         }
