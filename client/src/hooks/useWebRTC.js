@@ -12,7 +12,7 @@ const ICE_SERVERS = {
 };
 
 export function useWebRTC() {
-  const { socket, participant, updateMediaState } = useSocket();
+  const { socket, participant, updateMediaState, roomSettings } = useSocket();
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState(new Map());
   const [isAudioMuted, setIsAudioMuted] = useState(false);
@@ -573,6 +573,32 @@ export function useWebRTC() {
     }
   }, [participant?.isMuted, localStream]);
 
+  // Handle host force camera off if participant state gets isCameraOff: true
+  useEffect(() => {
+    if (participant?.isCameraOff && !isVideoOffRef.current) {
+      isVideoOffRef.current = true;
+      setIsVideoOff(true);
+
+      if (localStreamRef.current) {
+        localStreamRef.current.getVideoTracks().forEach((track) => {
+          track.enabled = false;
+        });
+      }
+      if (localStream) {
+        localStream.getVideoTracks().forEach((track) => {
+          track.enabled = false;
+        });
+      }
+      peersRef.current.forEach((pc) => {
+        pc.getSenders().forEach((sender) => {
+          if (sender.track && sender.track.kind === 'video') {
+            sender.track.enabled = false;
+          }
+        });
+      });
+    }
+  }, [participant?.isCameraOff, localStream]);
+
   // Media Controls: Screen Share
   const toggleScreenShare = useCallback(async () => {
     if (!isScreenSharing) {
@@ -631,6 +657,14 @@ export function useWebRTC() {
       });
     }
   }, [updateMediaState]);
+
+  // Handle host disabling screen sharing while joiner is actively sharing
+  useEffect(() => {
+    if (isScreenSharing && !participant?.isHost && roomSettings?.allowJoinerScreenShare === false) {
+      stopScreenShare();
+      toast.error('Host has disabled screen sharing for joiners.');
+    }
+  }, [roomSettings?.allowJoinerScreenShare, isScreenSharing, participant?.isHost, stopScreenShare]);
 
   return {
     localStream,

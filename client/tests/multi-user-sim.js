@@ -120,7 +120,15 @@ async function runMultiUserSimulation() {
   console.log(`   ✅ Public message received by User 3: "${msg1.text}" from ${msg1.senderName}`);
 
   // GIF / Media message test (Zero restrictions)
-  const gifMsgPromise = new Promise((res) => socket1.on('chat:message', res));
+  const gifMsgPromise = new Promise((res) => {
+    const handler = (m) => {
+      if (m.mediaUrl) {
+        socket1.off('chat:message', handler);
+        res(m);
+      }
+    };
+    socket1.on('chat:message', handler);
+  });
   socket2.emit('chat:send', {
     text: 'Dekho yeh kalesh meme! 😂',
     mediaUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
@@ -136,7 +144,15 @@ async function runMultiUserSimulation() {
   console.log(`   ✅ Reaction recorded: ${JSON.stringify(reactUpdate.reactions)} on msg ${reactUpdate.messageId}`);
 
   // Anonymous Secret Message
-  const secretPromise = new Promise((res) => socket1.on('chat:message', res));
+  const secretPromise = new Promise((res) => {
+    const handler = (m) => {
+      if (m.isSecret) {
+        socket1.off('chat:message', handler);
+        res(m);
+      }
+    };
+    socket1.on('chat:message', handler);
+  });
   socket2.emit('chat:send', { text: 'Rahul sabse bada feku hai! 🤫', isSecret: true });
   const secretMsg = await secretPromise;
   console.log(`   ✅ Anonymous Secret Message received: "${secretMsg.text}" | Sender: ${secretMsg.senderName} (${secretMsg.senderAvatar})`);

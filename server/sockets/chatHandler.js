@@ -17,6 +17,12 @@ export function registerChatHandlers(io, socket) {
     const participant = room.participants.get(socket.id);
     if (!participant) return;
 
+    // Enforce host chat moderation setting
+    if (room.settings && !room.settings.allowJoinerChat && !participant.isHost) {
+      socket.emit('chat:error', { message: 'Host has paused chat for joiners.' });
+      return;
+    }
+
     const message = roomStore.addMessage(roomCode, {
       senderId: socket.id,
       senderName: participant.name,

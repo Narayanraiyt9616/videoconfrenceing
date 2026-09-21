@@ -12,7 +12,11 @@ import {
   MessageSquare,
   LogOut,
   Trash2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Wand2,
+  Volume2,
+  ShieldCheck,
+  Crown
 } from 'lucide-react';
 import { ReactionPicker } from '../common/ReactionPicker.jsx';
 
@@ -29,10 +33,14 @@ export function RoomControls({
   onOpenGames,
   onOpenPolls,
   onOpenGifs,
+  onOpenSoundboard,
+  onOpenFilters,
+  onOpenHostControls,
   onLeaveRoom,
   onRequestLeave,
   onEndRoom,
-  isHost
+  isHost,
+  roomSettings
 }) {
   const [showReactionPicker, setShowReactionPicker] = useState(false);
 
@@ -56,13 +64,20 @@ export function RoomControls({
         {/* 1. Mic Button */}
         <button
           type="button"
+          disabled={!roomSettings?.allowJoinerUnmute && !isHost && isAudioMuted}
           onClick={onToggleAudio}
-          className={`w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+          className={`w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-xl flex items-center justify-center transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
             isAudioMuted
               ? 'bg-red-500/20 border border-red-500/40 text-red-400'
               : 'bg-[#222222] hover:bg-[#2c2c2c] border border-[#383838] text-[#ffa31a]'
           }`}
-          title={isAudioMuted ? 'Unmute Mic' : 'Mute Mic'}
+          title={
+            !roomSettings?.allowJoinerUnmute && !isHost && isAudioMuted
+              ? 'Host has locked unmuting'
+              : isAudioMuted
+              ? 'Unmute Mic'
+              : 'Mute Mic'
+          }
         >
           {isAudioMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
         </button>
@@ -84,20 +99,47 @@ export function RoomControls({
         {/* 3. Screen Share Button */}
         <button
           type="button"
+          disabled={!roomSettings?.allowJoinerScreenShare && !isHost}
           onClick={onToggleScreenShare}
-          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
             isScreenSharing
               ? 'bg-[#ffa31a] text-black shadow-md shadow-[#ffa31a]/30'
               : 'bg-[#222222] hover:bg-[#2c2c2c] border border-[#383838] text-white'
           }`}
-          title={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
+          title={
+            !roomSettings?.allowJoinerScreenShare && !isHost
+              ? 'Host disabled screen sharing for joiners'
+              : isScreenSharing
+              ? 'Stop Screen Share'
+              : 'Share Screen'
+          }
         >
           <MonitorUp className="w-5 h-5" />
         </button>
 
+        {/* 4. Video Filters Button */}
+        <button
+          type="button"
+          onClick={onOpenFilters}
+          className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-[#222222] hover:bg-[#2c2c2c] border border-[#383838] text-purple-400 hover:text-purple-300 flex items-center justify-center transition-all cursor-pointer"
+          title="Video Filters & Camera Effects"
+        >
+          <Wand2 className="w-5 h-5" />
+        </button>
+
+        {/* 5. Soundboard Button */}
+        <button
+          type="button"
+          onClick={onOpenSoundboard}
+          className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-[#222222] hover:bg-[#2c2c2c] border border-[#383838] text-[#ffa31a] flex items-center justify-center transition-all cursor-pointer"
+          title="Discord Soundboard (Sound Effects)"
+        >
+          <Volume2 className="w-5 h-5" />
+        </button>
+
         <div className="w-[1px] h-6 bg-[#2f2f2f] mx-0.5" />
 
-        {/* 4. Reaction Picker Trigger */}
+        {/* 6. Reaction Picker Trigger */}
         <button
           type="button"
           onClick={() => setShowReactionPicker(!showReactionPicker)}
@@ -111,7 +153,7 @@ export function RoomControls({
           <Smile className="w-5 h-5" />
         </button>
 
-        {/* 5. Games Hub Trigger */}
+        {/* 7. Games Hub Trigger */}
         <button
           type="button"
           onClick={onOpenGames}
@@ -121,7 +163,7 @@ export function RoomControls({
           <Gamepad2 className="w-5 h-5" />
         </button>
 
-        {/* 6. Anonymous Polls Trigger */}
+        {/* 8. Anonymous Polls Trigger */}
         <button
           type="button"
           onClick={onOpenPolls}
@@ -131,7 +173,7 @@ export function RoomControls({
           <Vote className="w-5 h-5" />
         </button>
 
-        {/* 7. GIF & Image Hub Trigger */}
+        {/* 9. GIF & Image Hub Trigger */}
         <button
           type="button"
           onClick={onOpenGifs}
@@ -141,7 +183,7 @@ export function RoomControls({
           <ImageIcon className="w-5 h-5" />
         </button>
 
-        {/* 8. Chat Toggle Trigger */}
+        {/* 10. Chat Toggle Trigger */}
         <button
           type="button"
           onClick={onToggleChat}
@@ -160,9 +202,21 @@ export function RoomControls({
           )}
         </button>
 
+        {/* 11. Exclusive Host Moderation Button (Only visible to host!) */}
+        {isHost && (
+          <button
+            type="button"
+            onClick={onOpenHostControls}
+            className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-tr from-[#ffa31a]/20 to-[#ffa31a]/40 border border-[#ffa31a] text-[#ffa31a] hover:text-white hover:bg-[#ffa31a] shadow-[0_0_15px_rgba(255,163,26,0.3)] flex items-center justify-center transition-all cursor-pointer"
+            title="Host Moderation & Settings Center"
+          >
+            <ShieldCheck className="w-5 h-5" />
+          </button>
+        )}
+
         <div className="w-[1px] h-6 bg-[#2f2f2f] mx-0.5" />
 
-        {/* 9. Leave Room */}
+        {/* 12. Leave Room */}
         <button
           type="button"
           onClick={isHost ? onLeaveRoom : (onRequestLeave || onLeaveRoom)}
@@ -172,7 +226,7 @@ export function RoomControls({
           <LogOut className="w-5 h-5" />
         </button>
 
-        {/* 10. Host End Room Button */}
+        {/* 13. Host End Room Button */}
         {isHost && (
           <button
             type="button"

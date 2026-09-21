@@ -28,7 +28,8 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
     typingUsers,
     setTyping,
     participant,
-    isHost
+    isHost,
+    roomSettings
   } = useSocket();
 
   const [input, setInput] = useState('');
@@ -282,53 +283,60 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
       )}
 
       {/* Input Section */}
-      <form onSubmit={handleSend} className="p-3.5 border-t border-[#262626] bg-[#181818] space-y-2.5">
-        <div className="flex items-center justify-between">
-          {/* Incognito Mode Toggle */}
-          <button
-            type="button"
-            onClick={() => setIsSecretMode(!isSecretMode)}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-              isSecretMode
-                ? 'bg-[#ffa31a] text-black shadow-md'
-                : 'bg-[#222] border border-[#333] text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Ghost className="w-3.5 h-3.5" />
-            <span>INCOGNITO {isSecretMode ? 'ON' : 'OFF'}</span>
-          </button>
-
-          {/* Visual Payload (GIF/Image) Trigger */}
-          <button
-            type="button"
-            onClick={() => setIsGifPickerOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold bg-[#222] hover:bg-[#2a2a2a] border border-[#ffa31a]/40 text-[#ffa31a] transition-all cursor-pointer"
-          >
-            <ImageIcon className="w-3.5 h-3.5" />
-            <span>+ GIF / PHOTO</span>
-          </button>
+      {!roomSettings?.allowJoinerChat && !isHost ? (
+        <div className="p-4 border-t border-[#262626] bg-[#161616] text-center">
+          <p className="text-xs font-bold text-amber-400">Host has paused chat for joiners 🔒</p>
+          <p className="text-[11px] text-zinc-500 mt-1">You will be able to send messages when host re-enables it.</p>
         </div>
+      ) : (
+        <form onSubmit={handleSend} className="p-3.5 border-t border-[#262626] bg-[#181818] space-y-2.5">
+          <div className="flex items-center justify-between">
+            {/* Incognito Mode Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsSecretMode(!isSecretMode)}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                isSecretMode
+                  ? 'bg-[#ffa31a] text-black shadow-md'
+                  : 'bg-[#222] border border-[#333] text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Ghost className="w-3.5 h-3.5" />
+              <span>INCOGNITO {isSecretMode ? 'ON' : 'OFF'}</span>
+            </button>
 
-        <div className="relative flex items-center">
-          <input
-            type="text"
-            value={input}
-            onChange={handleInputChange}
-            placeholder={isSecretMode ? 'Type anonymous message...' : 'Type message here...'}
-            maxLength={300}
-            className={`w-full pl-4 pr-12 py-2.5 rounded-xl text-xs bg-[#121212] border border-[#2e2e2e] text-white placeholder-zinc-500 focus:outline-none focus:border-[#ffa31a] transition-all ${
-              isSecretMode ? 'border-[#ffa31a] ring-1 ring-[#ffa31a]/30' : ''
-            }`}
-          />
-          <button
-            type="submit"
-            disabled={!input.trim()}
-            className="absolute right-1.5 p-2 rounded-lg bg-[#ffa31a] hover:bg-[#ff9000] text-black font-bold disabled:opacity-30 transition-all cursor-pointer"
-          >
-            <Send className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </form>
+            {/* Visual Payload (GIF/Image) Trigger */}
+            <button
+              type="button"
+              onClick={() => setIsGifPickerOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold bg-[#222] hover:bg-[#2a2a2a] border border-[#ffa31a]/40 text-[#ffa31a] transition-all cursor-pointer"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              <span>+ GIF / PHOTO</span>
+            </button>
+          </div>
+
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              value={input}
+              onChange={handleInputChange}
+              placeholder={isSecretMode ? 'Type anonymous message...' : 'Type message here...'}
+              maxLength={300}
+              className={`w-full pl-4 pr-12 py-2.5 rounded-xl text-xs bg-[#121212] border border-[#2e2e2e] text-white placeholder-zinc-500 focus:outline-none focus:border-[#ffa31a] transition-all ${
+                isSecretMode ? 'border-[#ffa31a] ring-1 ring-[#ffa31a]/30' : ''
+              }`}
+            />
+            <button
+              type="submit"
+              disabled={!input.trim()}
+              className="absolute right-1.5 p-2 rounded-lg bg-[#ffa31a] hover:bg-[#ff9000] text-black font-bold disabled:opacity-30 transition-all cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Fullscreen Media Zoom Modal */}
       {zoomedMedia && (

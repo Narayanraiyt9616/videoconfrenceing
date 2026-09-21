@@ -16,6 +16,10 @@ import { LeaveRequestModal } from './LeaveRequestModal.jsx';
 import { GifPickerModal } from '../chat/GifPickerModal.jsx';
 import { NotificationToastStack } from '../common/NotificationToastStack.jsx';
 import { NotificationCenterPanel } from './NotificationCenterPanel.jsx';
+import { SoundboardModal } from '../soundboard/SoundboardModal.jsx';
+import { SoundboardBanner } from '../soundboard/SoundboardBanner.jsx';
+import { VideoFiltersModal } from '../video/VideoFiltersModal.jsx';
+import { HostControlsModal } from '../host/HostControlsModal.jsx';
 import toast from 'react-hot-toast';
 
 export function RoomPage() {
@@ -28,6 +32,7 @@ export function RoomPage() {
     leaveRoom,
     joinRoom,
     isHost,
+    roomSettings,
     messages,
     sendMediaMessage
   } = useSocket();
@@ -52,6 +57,9 @@ export function RoomPage() {
   const [isNeedJoinOpen, setIsNeedJoinOpen] = useState(false);
   const [isLeaveReqOpen, setIsLeaveReqOpen] = useState(false);
   const [isGifPickerOpen, setIsGifPickerOpen] = useState(false);
+  const [isSoundboardOpen, setIsSoundboardOpen] = useState(false);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [isHostControlsOpen, setIsHostControlsOpen] = useState(false);
 
   // Unread chat messages counter
   const [unreadCount, setUnreadCount] = useState(0);
@@ -139,6 +147,9 @@ export function RoomPage() {
       {/* Real-time Host Approval Notifications (Knock & Leave requests) */}
       <HostApprovalModal />
 
+      {/* Discord-Style Soundboard Floating Banner */}
+      <SoundboardBanner />
+
       {/* 15-Second Temporary Activity / Dare / Roast Notification Toasts */}
       <NotificationToastStack />
 
@@ -150,6 +161,7 @@ export function RoomPage() {
         onInviteClick={handleInviteClick}
         onLeaveClick={handleLeaveTrigger}
         onEndRoomClick={() => setIsEndRoomOpen(true)}
+        onOpenHostControls={() => setIsHostControlsOpen(true)}
       />
 
       {/* Real-Time Active Game / Prompt Overlay */}
@@ -181,10 +193,14 @@ export function RoomPage() {
         onOpenGames={() => setIsGamesOpen(true)}
         onOpenPolls={() => setIsPollsOpen(true)}
         onOpenGifs={() => setIsGifPickerOpen(true)}
+        onOpenSoundboard={() => setIsSoundboardOpen(true)}
+        onOpenFilters={() => setIsFiltersOpen(true)}
+        onOpenHostControls={() => setIsHostControlsOpen(true)}
         onLeaveRoom={handleLeaveRoom}
         onRequestLeave={() => setIsLeaveReqOpen(true)}
         onEndRoom={() => setIsEndRoomOpen(true)}
         isHost={isHost}
+        roomSettings={roomSettings}
       />
 
       {/* Live Ephemeral Chat Drawer */}
@@ -229,6 +245,29 @@ export function RoomPage() {
       <EndRoomDialog
         isOpen={isEndRoomOpen}
         onClose={() => setIsEndRoomOpen(false)}
+      />
+
+      {/* Discord-Style Soundboard & Custom Uploader Modal */}
+      <SoundboardModal
+        isOpen={isSoundboardOpen}
+        onClose={() => setIsSoundboardOpen(false)}
+      />
+
+      {/* Video Filters & Camera Effects Modal */}
+      <VideoFiltersModal
+        isOpen={isFiltersOpen}
+        onClose={() => setIsFiltersOpen(false)}
+        localStream={localStream}
+      />
+
+      {/* Exclusive Host Moderation Control Center */}
+      <HostControlsModal
+        isOpen={isHostControlsOpen}
+        onClose={() => setIsHostControlsOpen(false)}
+        onOpenEndRoom={() => {
+          setIsHostControlsOpen(false);
+          setIsEndRoomOpen(true);
+        }}
       />
 
       {/* If directly navigated to room URL without joining */}

@@ -41,11 +41,21 @@ export function registerWebRTCHandlers(io, socket) {
     socket.to(roomCode).emit('video:ready', { from: socket.id });
   });
 
-  // Media toggle states (Mic, Camera, Screen Share)
+  // Media toggle states (Mic, Camera, Screen Share, Video Filter)
   socket.on('video:media-state', (updates) => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return;
+    const room = roomStore.getRoom(roomCode);
+    const participant = room?.participants.get(socket.id);
+
+    // If joiner attempting to screen share but host disallowed it
+    if (updates.isScreenSharing && room?.settings?.allowJoinerScreenShare === false && !participant?.isHost) {
+      socket.emit('webrtc:error', { message: 'Host has disabled screen sharing for joiners.' });
+      return;
+    }
+
     const result = roomStore.updateParticipantMedia(socket.id, updates);
     if (result) {
-      const roomCode = result.room.code;
       io.to(roomCode).emit('participant:media-updated', {
         socketId: socket.id,
         ...updates

@@ -25,6 +25,16 @@ export function SocketProvider({ children }) {
   const [floatingReactions, setFloatingReactions] = useState([]);
   const [pendingKnocks, setPendingKnocks] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
+  const [roomSettings, setRoomSettings] = useState({
+    isLocked: false,
+    allowJoinerScreenShare: true,
+    allowJoinerChat: true,
+    allowJoinerSoundboard: true,
+    allowJoinerUnmute: true
+  });
+  const [customSounds, setCustomSounds] = useState([]);
+  const [activeSoundEffect, setActiveSoundEffect] = useState(null);
+  const [activeVideoFilter, setActiveVideoFilter] = useState('none');
 
   // Initialize Socket connection
   useEffect(() => {
@@ -91,6 +101,30 @@ export function SocketProvider({ children }) {
         style: { background: '#11141e', color: '#ffca28' }
       });
       setParticipant((curr) => (curr ? { ...curr, isMuted: true } : curr));
+    });
+
+    socket.on('host:force-mute-all', () => {
+      toast('Host ne sabhi joiners ko mute kar diya! 🤫', {
+        icon: '🔇',
+        style: { background: '#11141e', color: '#ffca28' }
+      });
+      setParticipant((curr) => (curr && !curr.isHost ? { ...curr, isMuted: true } : curr));
+    });
+
+    socket.on('host:force-camera-off', () => {
+      toast('Host ne aapka camera band kar diya! 📷🚫', {
+        icon: '📷',
+        style: { background: '#11141e', color: '#ff4b1f' }
+      });
+      setParticipant((curr) => (curr ? { ...curr, isCameraOff: true } : curr));
+    });
+
+    socket.on('host:force-camera-off-all', () => {
+      toast('Host ne sabhi joiners ka camera band kar diya! 📷🚫', {
+        icon: '📷',
+        style: { background: '#11141e', color: '#ff4b1f' }
+      });
+      setParticipant((curr) => (curr && !curr.isHost ? { ...curr, isCameraOff: true } : curr));
     });
 
     socket.on('host:removed', ({ reason }) => {
@@ -222,6 +256,72 @@ export function SocketProvider({ children }) {
       setLeaveRequests(requests || []);
     });
 
+    // Room Settings & Host Management Listeners
+    socket.on('room:settings-updated', ({ settings }) => {
+      setRoomSettings(settings);
+      if (settings.isLocked) {
+        toast('Host ne kalesh room LOCK kar diya! 🔒', {
+          icon: '🔒',
+          style: { background: '#11141e', color: '#ffa31a' }
+        });
+      }
+    });
+
+    socket.on('room:host-transferred', ({ newHostId, newHostName }) => {
+      setParticipants((prev) =>
+        prev.map((p) => ({
+          ...p,
+          isHost: p.id === newHostId
+        }))
+      );
+      setParticipant((curr) => (curr ? { ...curr, isHost: curr.id === newHostId } : curr));
+      toast(`👑 ${newHostName} is now the Host!`, {
+        icon: '👑',
+        style: { background: '#11141e', color: '#ffa31a', border: '1px solid #ffa31a' }
+      });
+    });
+
+    // Discord-Style Soundboard Listeners
+    socket.on('soundboard:played', (sound) => {
+      if (sound.isCustom && sound.soundUrl) {
+        soundFx.playCustomAudio(sound.soundUrl);
+      } else {
+        soundFx.playSoundboardPreset(sound.soundId);
+      }
+
+      setActiveSoundEffect(sound);
+      setTimeout(() => {
+        setActiveSoundEffect((curr) => (curr?.timestamp === sound.timestamp ? null : curr));
+      }, 3500);
+    });
+
+    socket.on('soundboard:custom-sound-added', (sound) => {
+      setCustomSounds((prev) => {
+        const filtered = prev.filter((s) => s.id !== sound.id);
+        return [...filtered, sound];
+      });
+      toast(`${sound.uploadedBy?.name || 'Someone'} uploaded new sound: ${sound.emoji} ${sound.name}`, {
+        icon: '🎶',
+        style: { background: '#11141e', color: '#ffa31a' }
+      });
+    });
+
+    socket.on('soundboard:custom-sound-removed', ({ soundId }) => {
+      setCustomSounds((prev) => prev.filter((s) => s.id !== soundId));
+    });
+
+    socket.on('soundboard:error', ({ message }) => {
+      toast.error(message || 'Soundboard disallowed by host.');
+    });
+
+    socket.on('chat:error', ({ message }) => {
+      toast.error(message || 'Chat paused by host.');
+    });
+
+    socket.on('webrtc:error', ({ message }) => {
+      toast.error(message || 'Action disallowed by host.');
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -237,6 +337,16 @@ export function SocketProvider({ children }) {
     setRecentRoast(null);
     setPendingKnocks([]);
     setLeaveRequests([]);
+    setRoomSettings({
+      isLocked: false,
+      allowJoinerScreenShare: true,
+      allowJoinerChat: true,
+      allowJoinerSoundboard: true,
+      allowJoinerUnmute: true
+    });
+    setCustomSounds([]);
+    setActiveSoundEffect(null);
+    setActiveVideoFilter('none');
   }, []);
 
   // REST: Generate New Code Preview
@@ -311,6 +421,12 @@ export function SocketProvider({ children }) {
             setParticipant(response.participant);
             setParticipants(response.room.participants || []);
             setPolls(response.room.polls || []);
+            if (response.room.settings) {
+              setRoomSettings(response.room.settings);
+            }
+            if (response.room.customSounds) {
+              setCustomSounds(response.room.customSounds);
+            }
             if (response.room.currentGame) {
               setCurrentGame(response.room.currentGame);
             }
@@ -520,6 +636,84 @@ export function SocketProvider({ children }) {
     resetSession();
   }, [resetSession]);
 
+  // Soundboard Actions
+  const playSoundEffect = useCallback(({ soundId, soundName, soundEmoji, soundUrl, isCustom = false }) => {
+    if (!socketRef.current) return;
+    socketRef.current.emit('soundboard:play', { soundId, soundName, soundEmoji, soundUrl, isCustom });
+  }, []);
+
+  const uploadCustomSound = useCallback(({ name, emoji, audioData }) => {
+    return new Promise((resolve, reject) => {
+      if (!socketRef.current) return reject(new Error('Socket not connected'));
+      socketRef.current.emit('soundboard:upload', { name, emoji, audioData }, (res) => {
+        if (res?.success) {
+          resolve(res.sound);
+        } else {
+          reject(new Error(res?.error || 'Failed to upload sound'));
+        }
+      });
+    });
+  }, []);
+
+  const deleteCustomSound = useCallback((soundId) => {
+    return new Promise((resolve, reject) => {
+      if (!socketRef.current) return reject(new Error('Socket not connected'));
+      socketRef.current.emit('soundboard:delete', { soundId }, (res) => {
+        if (res?.success) {
+          resolve();
+        } else {
+          reject(new Error(res?.error || 'Failed to delete sound'));
+        }
+      });
+    });
+  }, []);
+
+  // Host Moderation Actions
+  const hostUpdateSettings = useCallback((settings) => {
+    return new Promise((resolve, reject) => {
+      if (!socketRef.current) return reject(new Error('Socket not connected'));
+      socketRef.current.emit('host:update-settings', { settings }, (res) => {
+        if (res?.success) {
+          setRoomSettings(res.settings);
+          resolve(res.settings);
+        } else {
+          reject(new Error(res?.error || 'Failed to update room settings'));
+        }
+      });
+    });
+  }, []);
+
+  const hostMuteAll = useCallback(() => {
+    if (!socketRef.current) return;
+    socketRef.current.emit('host:mute-all');
+    toast.success('Sabhi joiners ko mute kar diya! 🤫');
+  }, []);
+
+  const hostCameraOffAll = useCallback(() => {
+    if (!socketRef.current) return;
+    socketRef.current.emit('host:camera-off-all');
+    toast.success('Sabhi joiners ka camera band kar diya! 📷🚫');
+  }, []);
+
+  const hostTurnOffCamera = useCallback((targetSocketId) => {
+    if (!socketRef.current) return;
+    socketRef.current.emit('host:force-camera-off', { targetSocketId });
+  }, []);
+
+  const hostTransferRole = useCallback((targetSocketId) => {
+    if (!socketRef.current) return;
+    socketRef.current.emit('host:transfer-role', { targetSocketId });
+  }, []);
+
+  // Video Filter action
+  const setLocalVideoFilter = useCallback((filterId) => {
+    setActiveVideoFilter(filterId);
+    if (socketRef.current) {
+      socketRef.current.emit('video:media-state', { videoFilter: filterId });
+    }
+    setParticipant((curr) => (curr ? { ...curr, videoFilter: filterId } : curr));
+  }, []);
+
   const isHost = Boolean(participant?.isHost);
 
   return (
@@ -538,6 +732,10 @@ export function SocketProvider({ children }) {
         floatingReactions,
         pendingKnocks,
         leaveRequests,
+        roomSettings,
+        customSounds,
+        activeSoundEffect,
+        activeVideoFilter,
         isHost,
         generateNewCode,
         createRoom,
@@ -568,7 +766,16 @@ export function SocketProvider({ children }) {
         rejectLeave,
         hostMuteParticipant,
         hostRemoveParticipant,
-        endRoom
+        endRoom,
+        playSoundEffect,
+        uploadCustomSound,
+        deleteCustomSound,
+        hostUpdateSettings,
+        hostMuteAll,
+        hostCameraOffAll,
+        hostTurnOffCamera,
+        hostTransferRole,
+        setLocalVideoFilter
       }}
     >
       {children}

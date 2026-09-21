@@ -13,7 +13,7 @@ export function VideoGrid({
   isScreenSharing,
   onInviteClick
 }) {
-  const { participant, participants } = useSocket();
+  const { participant, participants, activeVideoFilter } = useSocket();
   const containerRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
@@ -288,6 +288,7 @@ export function VideoGrid({
                     : isSpeakingMap[featuredTarget.participant?.id]
                 )}
                 isFeatured={true}
+                videoFilter={featuredTarget.isLocal ? activeVideoFilter : featuredTarget.participant?.videoFilter}
               />
             </div>
           </div>
@@ -312,6 +313,7 @@ export function VideoGrid({
                       p.isLocal ? isScreenSharing : p.participant?.isScreenSharing
                     }
                     isSpeaking={isSpeaking}
+                    videoFilter={p.isLocal ? activeVideoFilter : p.participant?.videoFilter}
                   />
                 </div>
               );
@@ -334,6 +336,7 @@ export function VideoGrid({
               isCameraOff={isVideoOff}
               isScreenSharing={isScreenSharing}
               isSpeaking={Boolean(isSpeakingMap['local'])}
+              videoFilter={activeVideoFilter}
             />
           </div>
 

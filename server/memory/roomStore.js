@@ -37,6 +37,14 @@ class RoomStore {
       messages: [],
       polls: [],
       currentGame: null,
+      settings: {
+        isLocked: false,
+        allowJoinerScreenShare: true,
+        allowJoinerChat: true,
+        allowJoinerSoundboard: true,
+        allowJoinerUnmute: true
+      },
+      customSounds: [],
       createdAt: now,
       lastActivity: now,
       emptySince: now // Room starts empty until host/participant joins
@@ -90,8 +98,12 @@ class RoomStore {
       return { success: false, error: 'Kalesh is full! Max participant limit reached.' };
     }
 
-    // Verify host token if claimed host
+    // Check if room is locked by host (verified host or first joiner can still enter)
     const verifiedHost = isHost && hostToken && hostToken === room.hostToken;
+    if (room.settings?.isLocked && !verifiedHost && room.participants.size > 0) {
+      return { success: false, error: 'Room is locked by the host! No new entries allowed.' };
+    }
+
     if (verifiedHost) {
       room.hostSocketId = socketId;
     }
@@ -104,6 +116,7 @@ class RoomStore {
       isMuted: false,
       isCameraOff: false,
       isScreenSharing: false,
+      videoFilter: 'none',
       joinedAt: Date.now()
     };
 
@@ -211,6 +224,7 @@ class RoomStore {
   addJoinKnock(code, { socketId, name, avatar }) {
     const room = this.getRoom(code);
     if (!room) return null;
+    if (room.settings?.isLocked) return null; // Reject knocks if room is locked
     const knock = { socketId, name, avatar, requestedAt: Date.now() };
     room.pendingKnocks.set(socketId, knock);
     return knock;
@@ -239,6 +253,81 @@ class RoomStore {
     const room = this.getRoom(code);
     if (!room) return false;
     return room.leaveRequests.delete(socketId);
+  }
+
+  /**
+   * Host Room Settings Management
+   */
+  updateSettings(code, newSettings) {
+    const room = this.getRoom(code);
+    if (!room) return null;
+    if (!room.settings) {
+      room.settings = {
+        isLocked: false,
+        allowJoinerScreenShare: true,
+        allowJoinerChat: true,
+        allowJoinerSoundboard: true,
+        allowJoinerUnmute: true
+      };
+    }
+    room.settings = { ...room.settings, ...newSettings };
+    this.touch(code);
+    return room.settings;
+  }
+
+  /**
+   * Discord-style Custom Soundboard Management
+   */
+  addCustomSound(code, { name, emoji, audioData, uploadedBy }) {
+    const room = this.getRoom(code);
+    if (!room) return null;
+    if (!room.customSounds) room.customSounds = [];
+
+    // Keep buffer reasonable in RAM: limit to 30 custom sounds per room
+    if (room.customSounds.length >= 30) {
+      room.customSounds.shift();
+    }
+
+    const sound = {
+      id: uuidv4(),
+      name: String(name || 'Custom Sound').slice(0, 30),
+      emoji: emoji || '🔊',
+      audioData, // Base64 Data URL
+      uploadedBy: uploadedBy || { name: 'Friend' },
+      uploadedAt: Date.now()
+    };
+
+    room.customSounds.push(sound);
+    this.touch(code);
+    return sound;
+  }
+
+  deleteCustomSound(code, soundId) {
+    const room = this.getRoom(code);
+    if (!room || !room.customSounds) return false;
+    const index = room.customSounds.findIndex((s) => s.id === soundId);
+    if (index !== -1) {
+      room.customSounds.splice(index, 1);
+      this.touch(code);
+      return true;
+    }
+    return false;
+  }
+
+  transferHost(code, newHostSocketId) {
+    const room = this.getRoom(code);
+    if (!room) return null;
+    const newHost = room.participants.get(newHostSocketId);
+    if (!newHost) return null;
+
+    if (room.hostSocketId && room.participants.has(room.hostSocketId)) {
+      room.participants.get(room.hostSocketId).isHost = false;
+    }
+
+    newHost.isHost = true;
+    room.hostSocketId = newHostSocketId;
+    this.touch(code);
+    return newHost;
   }
 
   /**
@@ -440,6 +529,14 @@ class RoomStore {
       pollsCount: room.polls.length,
       polls: room.polls.map(p => this.serializePoll(p)),
       currentGame: room.currentGame,
+      settings: room.settings || {
+        isLocked: false,
+        allowJoinerScreenShare: true,
+        allowJoinerChat: true,
+        allowJoinerSoundboard: true,
+        allowJoinerUnmute: true
+      },
+      customSounds: room.customSounds || [],
       createdAt: room.createdAt,
       lastActivity: room.lastActivity
     };

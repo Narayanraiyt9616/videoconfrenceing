@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, memo } from 'react';
-import { Mic, MicOff, Video, VideoOff, Crown, MonitorUp, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Crown, MonitorUp, Volume2, Wand2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const VideoCard = memo(function VideoCard({
@@ -10,7 +10,8 @@ export const VideoCard = memo(function VideoCard({
   isCameraOff = false,
   isScreenSharing = false,
   isSpeaking = false,
-  isFeatured = false
+  isFeatured = false,
+  videoFilter = null
 }) {
   const videoRef = useRef(null);
   const shouldMute = Boolean(isLocal || isMuted);
@@ -50,6 +51,9 @@ export const VideoCard = memo(function VideoCard({
     }
   }, [isLocal, stream, isMuted]);
 
+  const activeFilter = videoFilter || participant?.videoFilter || 'none';
+  const filterClass = `filter-${activeFilter}`;
+
   return (
     <motion.div
       layout
@@ -71,7 +75,7 @@ export const VideoCard = memo(function VideoCard({
         muted={shouldMute}
         className={`w-full h-full object-cover transition-opacity duration-300 ${
           isLocal && !isScreenSharing ? 'scale-x-[-1]' : ''
-        } ${isCameraOff ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+        } ${isCameraOff ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${filterClass}`}
       />
 
       {/* Camera Off Avatar State */}
@@ -106,6 +110,12 @@ export const VideoCard = memo(function VideoCard({
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#252525] border border-[#3e3e3e] text-[#ffa31a] shadow-sm">
             <MonitorUp className="w-3 h-3 text-[#ffa31a]" />
             <span>SCREEN</span>
+          </div>
+        )}
+        {activeFilter !== 'none' && !isCameraOff && (
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-950/80 border border-purple-500/40 text-purple-300 shadow-sm backdrop-blur-sm">
+            <Wand2 className="w-3 h-3 text-purple-400" />
+            <span className="uppercase tracking-wider">{activeFilter}</span>
           </div>
         )}
         {isSpeaking && (

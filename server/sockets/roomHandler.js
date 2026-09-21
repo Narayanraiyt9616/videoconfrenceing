@@ -98,6 +98,10 @@ export function registerRoomHandlers(io, socket) {
       return callback?.({ success: false, error: 'Room not found or has expired! 💀' });
     }
 
+    if (room.settings?.isLocked) {
+      return callback?.({ success: false, error: 'Room is locked by the host! Knocking is disabled.' });
+    }
+
     // Touch room to keep alive while waiting for host response
     roomStore.touch(code);
 
@@ -209,6 +213,191 @@ export function registerRoomHandlers(io, socket) {
       message: customMessage || 'Host ne jaane se mana kar diya! Abhi pura kalesh dekhna padega! 😂🔥'
     });
     io.to(socket.id).emit('host:leave-requests-updated', Array.from(room.leaveRequests.values()));
+  });
+
+  // Host update room settings (permissions, lock state)
+  socket.on('host:update-settings', ({ settings }, callback) => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return callback?.({ success: false });
+    const room = roomStore.getRoom(roomCode);
+    if (!room || room.hostSocketId !== socket.id) {
+      return callback?.({ success: false, error: 'Unauthorized: Only host can update room settings' });
+    }
+
+    const updatedSettings = roomStore.updateSettings(roomCode, settings);
+    io.to(roomCode).emit('room:settings-updated', { settings: updatedSettings });
+    callback?.({ success: true, settings: updatedSettings });
+  });
+
+  // Host mute all participants except host
+  socket.on('host:mute-all', () => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return;
+    const room = roomStore.getRoom(roomCode);
+    if (!room || room.hostSocketId !== socket.id) return;
+
+    for (const [pId, p] of room.participants.entries()) {
+      if (pId !== socket.id) {
+        p.isMuted = true;
+        io.to(pId).emit('host:force-mute');
+        io.to(roomCode).emit('participant:media-updated', {
+          socketId: pId,
+          isMuted: true
+        });
+      }
+    }
+  });
+
+  // Host turn off camera for all participants except host
+  socket.on('host:camera-off-all', () => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return;
+    const room = roomStore.getRoom(roomCode);
+    if (!room || room.hostSocketId !== socket.id) return;
+
+    for (const [pId, p] of room.participants.entries()) {
+      if (pId !== socket.id) {
+        p.isCameraOff = true;
+        io.to(pId).emit('host:force-camera-off');
+        io.to(roomCode).emit('participant:media-updated', {
+          socketId: pId,
+          isCameraOff: true
+        });
+      }
+    }
+  });
+
+  // Host force turn off camera for specific participant
+  socket.on('host:force-camera-off', ({ targetSocketId }) => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return;
+    const room = roomStore.getRoom(roomCode);
+    if (!room || room.hostSocketId !== socket.id) return;
+
+    const target = room.participants.get(targetSocketId);
+    if (target) {
+      target.isCameraOff = true;
+      io.to(targetSocketId).emit('host:force-camera-off');
+      io.to(roomCode).emit('participant:media-updated', {
+        socketId: targetSocketId,
+        isCameraOff: true
+      });
+    }
+  });
+
+  // Host transfer role to another participant
+  socket.on('host:transfer-role', ({ targetSocketId }) => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return;
+    const room = roomStore.getRoom(roomCode);
+    if (!room || room.hostSocketId !== socket.id) return;
+
+    const newHost = roomStore.transferHost(roomCode, targetSocketId);
+    if (newHost) {
+      io.to(roomCode).emit('room:host-transferred', {
+        previousHostId: socket.id,
+        newHostId: targetSocketId,
+        newHostName: newHost.name
+      });
+      io.to(roomCode).emit('participants:updated', Array.from(room.participants.values()));
+    }
+  });
+
+  // Soundboard: Trigger a sound effect across room
+  socket.on('soundboard:play', ({ soundId, soundName, soundEmoji, soundUrl, isCustom = false }) => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return;
+    const room = roomStore.getRoom(roomCode);
+    if (!room) return;
+
+    const participant = room.participants.get(socket.id);
+    if (!participant) return;
+
+    // Check if host disabled soundboard for joiners
+    if (!room.settings?.allowJoinerSoundboard && !participant.isHost) {
+      return socket.emit('soundboard:error', { message: 'Host has disabled soundboard for joiners!' });
+    }
+
+    io.to(roomCode).emit('soundboard:played', {
+      soundId,
+      soundName,
+      soundEmoji: soundEmoji || '🔊',
+      soundUrl: soundUrl || null,
+      isCustom,
+      playedBy: {
+        id: socket.id,
+        name: participant.name,
+        avatar: participant.avatar
+      },
+      timestamp: Date.now()
+    });
+  });
+
+  // Soundboard: Upload custom sound effect to ephemeral room memory
+  socket.on('soundboard:upload', ({ name, emoji, audioData }, callback) => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return callback?.({ success: false, error: 'Room not found' });
+    const room = roomStore.getRoom(roomCode);
+    if (!room) return callback?.({ success: false, error: 'Room not found' });
+
+    const participant = room.participants.get(socket.id);
+    if (!participant) return callback?.({ success: false, error: 'Participant not found' });
+
+    if (!room.settings?.allowJoinerSoundboard && !participant.isHost) {
+      return callback?.({ success: false, error: 'Host has disabled soundboard for joiners!' });
+    }
+
+    if (!audioData || typeof audioData !== 'string') {
+      return callback?.({ success: false, error: 'Audio data is required' });
+    }
+
+    // Limit base64 audio payload to ~3.5MB to protect RAM
+    if (audioData.length > 3500000) {
+      return callback?.({ success: false, error: 'Audio file too large! Maximum 2.5MB allowed.' });
+    }
+
+    const sound = roomStore.addCustomSound(roomCode, {
+      name,
+      emoji,
+      audioData,
+      uploadedBy: {
+        id: socket.id,
+        name: participant.name,
+        avatar: participant.avatar
+      }
+    });
+
+    if (sound) {
+      io.to(roomCode).emit('soundboard:custom-sound-added', sound);
+      callback?.({ success: true, sound });
+    } else {
+      callback?.({ success: false, error: 'Failed to upload custom sound' });
+    }
+  });
+
+  // Soundboard: Delete custom sound effect
+  socket.on('soundboard:delete', ({ soundId }, callback) => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return callback?.({ success: false });
+    const room = roomStore.getRoom(roomCode);
+    if (!room) return callback?.({ success: false });
+
+    const participant = room.participants.get(socket.id);
+    const sound = room.customSounds?.find((s) => s.id === soundId);
+    if (!sound) return callback?.({ success: false, error: 'Sound not found' });
+
+    const canDelete = participant?.isHost || sound.uploadedBy?.id === socket.id;
+    if (!canDelete) {
+      return callback?.({ success: false, error: 'Only host or the uploader can delete this sound.' });
+    }
+
+    const deleted = roomStore.deleteCustomSound(roomCode, soundId);
+    if (deleted) {
+      io.to(roomCode).emit('soundboard:custom-sound-removed', { soundId });
+      callback?.({ success: true });
+    } else {
+      callback?.({ success: false });
+    }
   });
 
   // Host officially ends room

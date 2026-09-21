@@ -18,12 +18,13 @@ import { useNotifications } from '../../context/NotificationContext.jsx';
 import { soundFx } from '../../utils/soundFx.js';
 import toast from 'react-hot-toast';
 
-export function RoomHeader({ onInviteClick, onLeaveClick, onEndRoomClick }) {
+export function RoomHeader({ onInviteClick, onLeaveClick, onEndRoomClick, onOpenHostControls }) {
   const {
     room,
     participant,
     participants,
     isHost,
+    roomSettings,
     hostMuteParticipant,
     hostRemoveParticipant
   } = useSocket();
@@ -85,6 +86,13 @@ export function RoomHeader({ onInviteClick, onLeaveClick, onEndRoomClick }) {
             <Copy className="w-3.5 h-3.5 text-[#888888] group-hover:text-white" />
           )}
         </button>
+
+        {/* Room Locked Badge */}
+        {roomSettings?.isLocked && (
+          <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase tracking-wider">
+            <span>LOCKED 🔒</span>
+          </div>
+        )}
       </div>
 
       {/* Center: HD Streaming Badge */}
@@ -162,6 +170,19 @@ export function RoomHeader({ onInviteClick, onLeaveClick, onEndRoomClick }) {
             </div>
           )}
         </div>
+
+        {/* Host Control Center Button (Only for Host) */}
+        {isHost && (
+          <button
+            type="button"
+            onClick={onOpenHostControls}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#ffa31a]/15 hover:bg-[#ffa31a] border border-[#ffa31a]/50 text-[#ffa31a] hover:text-black text-xs font-black transition-all cursor-pointer shadow-sm"
+            title="Open Host Moderation & Controls"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">HOST</span>
+          </button>
+        )}
 
         {/* Notification / Activity Center Trigger */}
         <button
