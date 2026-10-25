@@ -4,10 +4,11 @@
 
 import { roomStore } from '../memory/roomStore.js';
 import { normalizeRoomCode } from '../utils/codeGenerator.js';
+import dbStore from '../db/store.js';
 
 export function registerRoomHandlers(io, socket) {
   // Join temporary room
-  socket.on('room:join', ({ roomCode, name, avatar, isHost = false, hostToken = null }, callback) => {
+  socket.on('room:join', ({ roomCode, name, avatar, email, role, isHost = false, hostToken = null }, callback) => {
     const code = normalizeRoomCode(roomCode);
     if (!code) {
       return callback?.({ success: false, error: 'Room code is required' });
@@ -17,6 +18,8 @@ export function registerRoomHandlers(io, socket) {
       socketId: socket.id,
       name,
       avatar,
+      email,
+      role: role || (isHost ? 'faculty' : 'user'),
       isHost,
       hostToken
     });
@@ -31,6 +34,15 @@ export function registerRoomHandlers(io, socket) {
     const room = result.room;
     const currentParticipant = result.participant;
 
+    // Record attendance for online classroom & meeting tracking
+    dbStore.recordAttendance({
+      meetingCode: code,
+      courseCode: room.courseCode || '',
+      participantName: currentParticipant.name,
+      participantEmail: email || '',
+      role: currentParticipant.role || (isHost ? 'faculty' : 'student')
+    }).catch(() => {});
+
     // Notify the joining client of current room state
     const roomState = roomStore.toClientRoom(code);
     callback?.({
@@ -44,7 +56,7 @@ export function registerRoomHandlers(io, socket) {
       participant: currentParticipant
     });
 
-    console.log(`[Kalesh Room] ${currentParticipant.name} (${socket.id}) joined room ${code}`);
+    console.log(`[Meeting Room] ${currentParticipant.name} (${socket.id}) joined room ${code}`);
   });
 
   // Explicit leave
@@ -400,19 +412,96 @@ export function registerRoomHandlers(io, socket) {
     }
   });
 
+  // Hand Raise events
+  socket.on('hand:raise', () => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return;
+    const room = roomStore.getRoom(roomCode);
+    const participant = room?.participants.get(socket.id);
+    if (participant) {
+      participant.hasHandRaised = true;
+      participant.handRaisedAt = Date.now();
+      io.to(roomCode).emit('hand:raised', {
+        socketId: socket.id,
+        participantName: participant.name,
+        participantAvatar: participant.avatar,
+        handRaisedAt: participant.handRaisedAt
+      });
+    }
+  });
+
+  socket.on('hand:lower', ({ targetSocketId } = {}) => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return;
+    const room = roomStore.getRoom(roomCode);
+    const idToLower = targetSocketId || socket.id;
+    const participant = room?.participants.get(idToLower);
+    if (participant) {
+      participant.hasHandRaised = false;
+      io.to(roomCode).emit('hand:lowered', {
+        socketId: idToLower,
+        participantName: participant.name
+      });
+    }
+  });
+
+  socket.on('hand:lower-all', () => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return;
+    const room = roomStore.getRoom(roomCode);
+    if (!room || room.hostSocketId !== socket.id) return;
+    for (const p of room.participants.values()) {
+      p.hasHandRaised = false;
+    }
+    io.to(roomCode).emit('hand:all-lowered');
+  });
+
+  // Live Captions Transcript Broadcast
+  socket.on('captions:transcript', ({ text, isFinal }) => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return;
+    const room = roomStore.getRoom(roomCode);
+    const participant = room?.participants.get(socket.id);
+    if (participant && text) {
+      socket.to(roomCode).emit('captions:received', {
+        senderId: socket.id,
+        senderName: participant.name,
+        senderAvatar: participant.avatar,
+        text,
+        isFinal: Boolean(isFinal),
+        timestamp: Date.now()
+      });
+    }
+  });
+
+  // Recording Status Broadcast
+  socket.on('recording:status', ({ isRecording, recordingDuration = 0 }) => {
+    const roomCode = roomStore.socketToRoom.get(socket.id);
+    if (!roomCode) return;
+    const room = roomStore.getRoom(roomCode);
+    if (!room || room.hostSocketId !== socket.id) return;
+    io.to(roomCode).emit('recording:status-changed', {
+      isRecording: Boolean(isRecording),
+      recordingDuration
+    });
+  });
+
   // Host officially ends room
-  socket.on('room:end', () => {
+  socket.on('room:end', async () => {
     const roomCode = roomStore.socketToRoom.get(socket.id);
     if (!roomCode) return;
 
     const room = roomStore.getRoom(roomCode);
     if (!room || room.hostSocketId !== socket.id) return;
 
-    console.log(`[Kalesh Room] Host officially ended room ${roomCode}. Destroying all data!`);
+    console.log(`[Meeting Room] Host officially ended room ${roomCode}.`);
+
+    // Update persistent meeting status in database
+    dbStore.updateMeeting(roomCode, { status: 'ended', endedAt: new Date().toISOString() }).catch(() => {});
 
     // Broadcast room destruction to all participants
     io.to(roomCode).emit('room:ended', {
-      reason: 'Kalesh officially ended by host. All room data has been destroyed.'
+      reason: 'Meeting officially ended by the host.'
     });
 
     // Disconnect all sockets from room
@@ -429,8 +518,13 @@ export function handleParticipantLeave(io, socket) {
 
   const { roomCode, participant, roomDeleted, remaining, newHostId } = result;
 
+  // Mark attendance leave in database
+  if (participant?.name) {
+    dbStore.markAttendanceLeave(roomCode, participant.name).catch(() => {});
+  }
+
   if (roomDeleted) {
-    console.log(`[Kalesh Room] All participants left. Room ${roomCode} destroyed from memory.`);
+    console.log(`[Meeting Room] All participants left. Room ${roomCode} destroyed from memory.`);
   } else {
     // Notify remaining participants
     io.to(roomCode).emit('participant:left', {

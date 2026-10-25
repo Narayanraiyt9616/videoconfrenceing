@@ -5,14 +5,19 @@
     "middleware",
     "routes",
     "sockets",
-    "utils"
+    "utils",
+    "config",
+    "models"
   ],
   "ext": "js,json",
   "ignore": [
     "node_modules",
+    "data",
+    "data/**",
     "../client",
     "../scripts",
     "*.log"
   ],
+  "stdin": false,
   "delay": 200
 }

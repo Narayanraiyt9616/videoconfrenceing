@@ -88,31 +88,36 @@ class RoomStore {
   /**
    * Add participant to room
    */
-  joinRoom(code, { socketId, name, avatar, isHost = false, hostToken = null }) {
+  joinRoom(code, { socketId, name, avatar, role = 'student', isHost = false, hostToken = null }) {
     const room = this.getRoom(code);
     if (!room) {
       return { success: false, error: 'Room does not exist or has expired.' };
     }
 
     if (room.participants.size >= room.maxParticipants) {
-      return { success: false, error: 'Kalesh is full! Max participant limit reached.' };
+      return { success: false, error: 'Classroom is full! Max participant limit reached.' };
     }
 
-    // Check if room is locked by host (verified host or first joiner can still enter)
+    // Check if room is locked by host (verified host can still enter)
     const verifiedHost = isHost && hostToken && hostToken === room.hostToken;
     if (room.settings?.isLocked && !verifiedHost && room.participants.size > 0) {
-      return { success: false, error: 'Room is locked by the host! No new entries allowed.' };
+      return { success: false, error: 'Classroom is locked by the faculty host! No new entries allowed.' };
     }
 
     if (verifiedHost) {
       room.hostSocketId = socketId;
     }
 
+    // A student can never claim or fallback to host
+    const canClaimHost = role !== 'student';
+    const isHostAssigned = Boolean(verifiedHost || (canClaimHost && room.participants.size === 0));
+
     const participant = {
       id: socketId,
-      name: (name || 'Kaleshi Friend').slice(0, 30),
-      avatar: avatar || '🔥',
-      isHost: verifiedHost || (room.participants.size === 0), // fallback host if first
+      name: (name || 'Participant').slice(0, 30),
+      avatar: avatar || (role === 'faculty' ? '🎓' : '🎒'),
+      role: role || (isHostAssigned ? 'faculty' : 'student'),
+      isHost: isHostAssigned,
       isMuted: false,
       isCameraOff: false,
       isScreenSharing: false,

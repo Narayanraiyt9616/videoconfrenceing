@@ -5,12 +5,20 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import roomRoutes from './routes/roomRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import meetingRoutes from './routes/meetingRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import recordingRoutes from './routes/recordingRoutes.js';
+import { connectDB } from './config/db.js';
 import { initializeSockets } from './sockets/index.js';
 import { roomStore } from './memory/roomStore.js';
 import { rateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 dotenv.config();
+
+// Initialize MongoDB / Database layer
+connectDB();
 
 const PORT = process.env.PORT || 5000;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -27,7 +35,7 @@ const corsOptions = {
     // Allow requests with no origin (mobile apps, curl, etc.) or any web client origin
     callback(null, true);
   },
-  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true
 };
 
@@ -36,7 +44,7 @@ const io = new Server(server, {
   cors: corsOptions,
   pingTimeout: 30000,
   pingInterval: 10000,
-  maxHttpBufferSize: 25 * 1024 * 1024 // 25MB buffer for 5-second video sharing
+  maxHttpBufferSize: 25 * 1024 * 1024 // 25MB buffer
 });
 
 // Middleware
@@ -46,6 +54,10 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(rateLimiter({ max: 120, windowMs: 60000 }));
 
 // REST API Endpoints
+app.use('/api/auth', authRoutes);
+app.use('/api/meetings', meetingRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/recordings', recordingRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/health', healthRoutes);
 
@@ -75,16 +87,18 @@ server.on('error', (err) => {
 
 server.listen(PORT, () => {
   console.log(`\n=================================================`);
-  console.log(`🔥 Aaj Ka Kalesh Server Live on port ${PORT}`);
-  console.log(`🔒 ARCHITECTURE: STRICT ZERO DATABASE`);
+  console.log(`🔥 Aaj Ka Kalesh / MeetHub Server Live on port ${PORT}`);
+  console.log(`🌐 Ready for WebRTC signaling & real-time sessions`);
   console.log(`🧹 Inactivity timeout: ${INACTIVITY_TIMEOUT_MS / 60000} mins`);
-  console.log(`🌐 Ready for WebRTC signaling & real-time kalesh`);
   console.log(`=================================================\n`);
 });
 
 // Graceful shutdown
-function handleShutdown() {
-  console.log('\n[Kalesh Server] Shutting down... Wiping all memory state.');
+let isShuttingDown = false;
+function handleShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`\n[Kalesh Server] Shutting down (${signal || 'signal'})... Wiping all memory state.`);
   clearInterval(cleanupTimer);
   roomStore.rooms.clear();
   roomStore.socketToRoom.clear();
@@ -92,7 +106,20 @@ function handleShutdown() {
     console.log('[Kalesh Server] Memory wiped. Process terminated.');
     process.exit(0);
   });
+  // Force exit after 3s if active sockets delay server.close
+  setTimeout(() => {
+    process.exit(0);
+  }, 3000).unref();
 }
 
-process.on('SIGINT', handleShutdown);
-process.on('SIGTERM', handleShutdown);
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Kalesh Server] Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Kalesh Server] Uncaught Exception:', err);
+});
+

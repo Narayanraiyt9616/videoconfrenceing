@@ -2,15 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSocket } from '../../context/SocketContext.jsx';
 import { useWebRTC } from '../../hooks/useWebRTC.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { VideoGrid } from '../video/VideoGrid.jsx';
 import { RoomHeader } from './RoomHeader.jsx';
-import { RoomControls } from './RoomControls.jsx';
+import { MeetControlBar } from './MeetControlBar.jsx';
+import { PreJoinLobby } from './PreJoinLobby.jsx';
 import { ChatDrawer } from '../chat/ChatDrawer.jsx';
 import { GamesModal } from '../games/GamesModal.jsx';
 import { PollsModal } from '../polls/PollsModal.jsx';
 import { ActiveGameOverlay } from '../games/ActiveGameOverlay.jsx';
 import { EndRoomDialog } from '../common/EndRoomDialog.jsx';
-import { JoinRoomModal } from '../landing/JoinRoomModal.jsx';
 import { HostApprovalModal } from './HostApprovalModal.jsx';
 import { LeaveRequestModal } from './LeaveRequestModal.jsx';
 import { GifPickerModal } from '../chat/GifPickerModal.jsx';
@@ -20,24 +21,42 @@ import { SoundboardModal } from '../soundboard/SoundboardModal.jsx';
 import { SoundboardBanner } from '../soundboard/SoundboardBanner.jsx';
 import { VideoFiltersModal } from '../video/VideoFiltersModal.jsx';
 import { HostControlsModal } from '../host/HostControlsModal.jsx';
+import { MeetingDetailsModal } from '../meeting/MeetingDetailsModal.jsx';
+import { AttendanceModal } from '../meeting/AttendanceModal.jsx';
+import { DeviceSettingsModal } from '../meeting/DeviceSettingsModal.jsx';
+import { RecordingPlaybackModal } from '../meeting/RecordingPlaybackModal.jsx';
+import { LiveCaptionsOverlay } from '../meeting/LiveCaptionsOverlay.jsx';
+import { EducationalWhiteboardModal } from './EducationalWhiteboardModal.jsx';
+import { StudyMaterialsDrawer } from './StudyMaterialsDrawer.jsx';
+import { api } from '../../utils/api.js';
 import toast from 'react-hot-toast';
 
 export function RoomPage() {
   const { roomCode } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const {
     room,
     participant,
+    participants,
     leaveRoom,
     joinRoom,
     isHost,
     roomSettings,
     messages,
-    sendMediaMessage
+    sendMediaMessage,
+    isHandRaised,
+    raiseHand,
+    lowerHand,
+    isCaptionsEnabled,
+    toggleCaptions,
+    isRecording,
+    recordingDuration,
+    broadcastRecordingStatus
   } = useSocket();
 
-  // Initialize WebRTC P2P Mesh
+  // Initialize WebRTC
   const {
     localStream,
     remoteStreams,
@@ -49,17 +68,36 @@ export function RoomPage() {
     toggleScreenShare
   } = useWebRTC();
 
+  // Meeting Metadata from MongoDB
+  const [meetingDetails, setMeetingDetails] = useState(null);
+  const [isInMeeting, setIsInMeeting] = useState(false);
+  const [isWaitingHost, setIsWaitingHost] = useState(false);
+  const [waitingMessage, setWaitingMessage] = useState('');
+
   // Modals & Drawers
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [isGamesOpen, setIsGamesOpen] = useState(false);
   const [isPollsOpen, setIsPollsOpen] = useState(false);
   const [isEndRoomOpen, setIsEndRoomOpen] = useState(false);
-  const [isNeedJoinOpen, setIsNeedJoinOpen] = useState(false);
   const [isLeaveReqOpen, setIsLeaveReqOpen] = useState(false);
   const [isGifPickerOpen, setIsGifPickerOpen] = useState(false);
   const [isSoundboardOpen, setIsSoundboardOpen] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isHostControlsOpen, setIsHostControlsOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isAttendanceOpen, setIsAttendanceOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
+  const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
+  const [isStudyMaterialsOpen, setIsStudyMaterialsOpen] = useState(false);
+
+  // Recording internals
+  const mediaRecorderRef = useRef(null);
+  const recordingChunksRef = useRef([]);
+  const recordingTimerRef = useRef(null);
+  const [localRecordingSeconds, setLocalRecordingSeconds] = useState(0);
+  const [recordingBlob, setRecordingBlob] = useState(null);
 
   // Unread chat messages counter
   const [unreadCount, setUnreadCount] = useState(0);
@@ -75,154 +113,345 @@ export function RoomPage() {
     }
   }, [messages, isChatOpen, lastMessageCount]);
 
-  // Handle room presence, refresh reconnect, and direct navigation
-  const wasInRoomRef = useRef(false);
-  const isReconnectingRef = useRef(false);
-
+  // Fetch meeting metadata from backend
   useEffect(() => {
-    if (room) {
-      wasInRoomRef.current = true;
-      setIsNeedJoinOpen(false);
-      return;
-    }
-
-    if (wasInRoomRef.current) {
-      // User was in room, but room ended or user was removed
-      navigate('/');
-      return;
-    }
-
-    // If refreshing on /room/:code and has stored session, auto-reconnect seamlessly
-    const storedName = sessionStorage.getItem('kalesh_userName');
-    const storedAvatar = sessionStorage.getItem('kalesh_avatar') || '🔥';
-    const cleanCode = roomCode?.toUpperCase();
-    const storedHostToken = cleanCode ? sessionStorage.getItem(`kalesh_host_${cleanCode}`) : null;
-
-    if (cleanCode && storedName && !isReconnectingRef.current) {
-      isReconnectingRef.current = true;
-      joinRoom({
-        roomCode: cleanCode,
-        name: storedName,
-        avatar: storedAvatar,
-        isHost: Boolean(storedHostToken),
-        hostToken: storedHostToken
+    if (!roomCode) return;
+    api
+      .get(`/api/meetings/${roomCode}`)
+      .then((res) => {
+        if (res.success && res.meeting) {
+          setMeetingDetails(res.meeting);
+        }
       })
-        .then(() => {
-          setIsNeedJoinOpen(false);
-        })
-        .catch(() => {
-          setIsNeedJoinOpen(true);
-        });
-    } else if (cleanCode) {
-      // First time hitting /room/:code directly without session
-      setIsNeedJoinOpen(true);
-    }
-  }, [room, roomCode, joinRoom, navigate]);
+      .catch((err) => {
+        console.warn('[RoomPage] Meeting info fetch:', err.message);
+      });
+  }, [roomCode]);
 
-  const handleInviteClick = () => {
-    const cleanCode = room?.code || roomCode;
-    const inviteUrl = `${window.location.origin}/join/${cleanCode}`;
-    navigator.clipboard.writeText(inviteUrl);
-    toast.success('Invite link copied! Send it to your friends 🔗', {
-      icon: '📋'
-    });
+  // Keyboard Shortcuts: Ctrl+D for Mic, Ctrl+E for Camera, Ctrl+H for Hand Raise
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore if typing in text inputs or textareas
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        toggleAudio();
+        toast(isAudioMuted ? 'Mic unmuted' : 'Mic muted', { icon: isAudioMuted ? '🎙️' : '🔇' });
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        toggleVideo();
+        toast(isVideoOff ? 'Camera turned on' : 'Camera turned off', { icon: isVideoOff ? '📹' : '📷' });
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h') {
+        e.preventDefault();
+        handleToggleHandRaise();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAudioMuted, isVideoOff, isHandRaised, toggleAudio, toggleVideo]);
+
+  // Hand raise toggle
+  const handleToggleHandRaise = () => {
+    if (isHandRaised) {
+      lowerHand();
+      toast('Hand lowered', { icon: '⬇️' });
+    } else {
+      raiseHand();
+      toast.success('Hand raised! ✋');
+    }
   };
 
-  const handleLeaveRoom = () => {
+  // Join action from PreJoinLobby
+  const handleLobbyJoin = async ({ name, avatar, isAudioMuted: initialMuted, isVideoOff: initialVideoOff, startPresenting }) => {
+    const cleanCode = roomCode.toUpperCase();
+    const storedHostToken = sessionStorage.getItem(`kalesh_host_${cleanCode}`);
+
+    const isOwner = Boolean(
+      storedHostToken ||
+      (user?.role === 'admin') ||
+      (user?.role === 'faculty' && meetingDetails && (
+        (meetingDetails.hostId && user && meetingDetails.hostId.toString() === (user._id || user.id).toString()) ||
+        (meetingDetails.hostEmail && user && meetingDetails.hostEmail === user.email)
+      ))
+    );
+
+    try {
+      await joinRoom({
+        roomCode: cleanCode,
+        name: user?.name || name,
+        avatar: user?.avatar || avatar,
+        email: user?.email || '',
+        role: user?.role || (isOwner ? 'faculty' : 'student'),
+        isHost: isOwner,
+        hostToken: storedHostToken
+      });
+
+      setIsInMeeting(true);
+
+      // Apply initial mute or camera off states
+      if (initialMuted && !isAudioMuted) toggleAudio();
+      if (initialVideoOff && !isVideoOff) toggleVideo();
+      if (startPresenting && !isScreenSharing) toggleScreenShare();
+    } catch (err) {
+      toast.error(err.message || 'Could not join meeting.');
+    }
+  };
+
+  // Browser MediaRecorder Recording Implementation
+  const handleToggleRecording = async () => {
+    if (!isRecording) {
+      try {
+        if (!navigator.mediaDevices?.getDisplayMedia) {
+          toast.error('Screen capture is not supported in this browser.');
+          return;
+        }
+
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: { ideal: 30 } },
+          audio: true
+        });
+
+        // Mix screen stream audio with local microphone audio if available
+        let recordStream = screenStream;
+        if (localStream && localStream.getAudioTracks().length > 0) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            const ctx = new AudioContextClass();
+            const dest = ctx.createMediaStreamDestination();
+
+            const micSource = ctx.createMediaStreamSource(localStream);
+            micSource.connect(dest);
+
+            if (screenStream.getAudioTracks().length > 0) {
+              const screenAudioSource = ctx.createMediaStreamSource(screenStream);
+              screenAudioSource.connect(dest);
+            }
+
+            recordStream = new MediaStream([
+              ...screenStream.getVideoTracks(),
+              ...dest.stream.getAudioTracks()
+            ]);
+          }
+        }
+
+        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+          ? 'video/webm;codecs=vp9,opus'
+          : 'video/webm';
+
+        const recorder = new MediaRecorder(recordStream, { mimeType });
+        mediaRecorderRef.current = recorder;
+        recordingChunksRef.current = [];
+
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            recordingChunksRef.current.push(e.data);
+          }
+        };
+
+        recorder.onstop = async () => {
+          clearInterval(recordingTimerRef.current);
+          const blob = new Blob(recordingChunksRef.current, { type: 'video/webm' });
+          setRecordingBlob(blob);
+          setIsRecordingModalOpen(true);
+          broadcastRecordingStatus(false, 0);
+
+          // Save recording metadata to database
+          api
+            .post('/api/recordings', {
+              meetingCode: roomCode,
+              title: `${meetingDetails?.title || 'Meeting'} Recording`,
+              durationSeconds: localRecordingSeconds,
+              fileSize: blob.size
+            })
+            .catch(() => {});
+
+          recordStream.getTracks().forEach((t) => t.stop());
+        };
+
+        recorder.start(1000); // 1-second chunks
+        broadcastRecordingStatus(true, 0);
+        setLocalRecordingSeconds(0);
+
+        recordingTimerRef.current = setInterval(() => {
+          setLocalRecordingSeconds((prev) => prev + 1);
+        }, 1000);
+
+        toast.success('Meeting recording started! 🔴');
+      } catch (err) {
+        if (err.name !== 'NotAllowedError') {
+          toast.error('Could not start recording: ' + err.message);
+        }
+      }
+    } else {
+      // Stop recording
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      clearInterval(recordingTimerRef.current);
+      toast('Recording stopped. Preparing preview...', { icon: '⏹️' });
+    }
+  };
+
+  const handleLeaveMeeting = () => {
     leaveRoom();
     navigate('/');
-    toast('Aap kalesh chhod kar nikal gaye! 🏃', { icon: '👋' });
+    toast('Left the meeting', { icon: '👋' });
   };
 
-  const handleLeaveTrigger = () => {
-    if (isHost) {
-      handleLeaveRoom();
-    } else {
-      setIsLeaveReqOpen(true);
+  const handleEndMeetingForEveryone = async () => {
+    try {
+      const cleanCode = roomCode.toUpperCase();
+      const storedHostToken = sessionStorage.getItem(`kalesh_host_${cleanCode}`);
+      await api.post(`/api/meetings/${roomCode}/end`, {}, {
+        headers: storedHostToken ? { 'x-host-token': storedHostToken } : {}
+      });
+      toast.success('Lecture ended for all participants.');
+    } catch (e) {
+      toast.error(e.message || 'Only the faculty host can end the lecture.');
+      return;
     }
+    leaveRoom();
+    navigate('/dashboard');
   };
+
+  // If user hasn't joined call yet, show the Google Meet PreJoin Green Room Lobby!
+  if (!isInMeeting && !room) {
+    return (
+      <PreJoinLobby
+        roomCode={roomCode}
+        meetingDetails={meetingDetails}
+        onJoin={handleLobbyJoin}
+        isWaitingHost={isWaitingHost}
+        waitingMessage={waitingMessage}
+      />
+    );
+  }
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#0a0a0a] flex flex-col select-none">
-      {/* Real-time Host Approval Notifications (Knock & Leave requests) */}
+    <div className="relative w-screen h-screen overflow-hidden bg-[#202124] flex flex-col select-none">
+      {/* Real-time Host Approval Notifications */}
       <HostApprovalModal />
 
       {/* Discord-Style Soundboard Floating Banner */}
       <SoundboardBanner />
 
-      {/* 15-Second Temporary Activity / Dare / Roast Notification Toasts */}
+      {/* Activity / Dare / Roast Notification Toasts */}
       <NotificationToastStack />
 
       {/* Collapsed Slide-Over Notification & Activity Center */}
       <NotificationCenterPanel />
 
-      {/* Dynamic Top Room Navigation Bar */}
+      {/* Top CampusVerse Live Room Header */}
       <RoomHeader
-        onInviteClick={handleInviteClick}
-        onLeaveClick={handleLeaveTrigger}
+        meetingDetails={meetingDetails}
+        onInviteClick={() => setIsDetailsOpen(true)}
+        onLeaveClick={handleLeaveMeeting}
         onEndRoomClick={() => setIsEndRoomOpen(true)}
         onOpenHostControls={() => setIsHostControlsOpen(true)}
       />
+
+      {/* Live Captions Subtitle Overlay */}
+      <LiveCaptionsOverlay isLocalAudioMuted={isAudioMuted} />
 
       {/* Real-Time Active Game / Prompt Overlay */}
       <ActiveGameOverlay />
 
       {/* Center Interactive WebRTC Video Grid */}
-      <main className="flex-1 relative w-full h-[calc(100vh-4rem)] overflow-hidden pb-20 sm:pb-24">
+      <main className="flex-1 relative w-full h-[calc(100vh-8rem)] overflow-hidden pb-4">
         <VideoGrid
           localStream={localStream}
           remoteStreams={remoteStreams}
           isAudioMuted={isAudioMuted}
           isVideoOff={isVideoOff}
           isScreenSharing={isScreenSharing}
-          onInviteClick={handleInviteClick}
+          onInviteClick={() => setIsDetailsOpen(true)}
         />
       </main>
 
-      {/* Floating Bottom Control Dock */}
-      <RoomControls
+      {/* CampusVerse Live Bottom Control Bar */}
+      <MeetControlBar
         isAudioMuted={isAudioMuted}
         isVideoOff={isVideoOff}
         isScreenSharing={isScreenSharing}
+        isHandRaised={isHandRaised}
+        isCaptionsEnabled={isCaptionsEnabled}
+        isRecording={isRecording}
+        recordingDuration={localRecordingSeconds || recordingDuration}
+        unreadCount={unreadCount}
+        participantsCount={participants.length}
+        roomCode={roomCode}
+        isHost={isHost}
+        roomSettings={roomSettings}
         onToggleAudio={toggleAudio}
         onToggleVideo={toggleVideo}
         onToggleScreenShare={toggleScreenShare}
+        onToggleHandRaise={handleToggleHandRaise}
+        onToggleCaptions={toggleCaptions}
+        onToggleRecording={handleToggleRecording}
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
-        isChatOpen={isChatOpen}
-        unreadCount={unreadCount}
-        onOpenGames={() => setIsGamesOpen(true)}
-        onOpenPolls={() => setIsPollsOpen(true)}
-        onOpenGifs={() => setIsGifPickerOpen(true)}
-        onOpenSoundboard={() => setIsSoundboardOpen(true)}
+        onToggleParticipants={() => setIsParticipantsOpen(!isParticipantsOpen)}
+        onOpenWhiteboard={() => setIsWhiteboardOpen(true)}
+        onOpenStudyMaterials={() => setIsStudyMaterialsOpen(true)}
+        onOpenDetails={() => setIsDetailsOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenFilters={() => setIsFiltersOpen(true)}
-        onOpenHostControls={() => setIsHostControlsOpen(true)}
-        onLeaveRoom={handleLeaveRoom}
-        onRequestLeave={() => setIsLeaveReqOpen(true)}
-        onEndRoom={() => setIsEndRoomOpen(true)}
-        isHost={isHost}
-        roomSettings={roomSettings}
+        onOpenAttendance={() => setIsAttendanceOpen(true)}
+        onOpenActivities={(type) => {
+          if (type === 'games') setIsGamesOpen(true);
+          if (type === 'polls') setIsPollsOpen(true);
+          if (type === 'soundboard') setIsSoundboardOpen(true);
+        }}
+        onLeaveMeeting={handleLeaveMeeting}
+        onEndMeetingForEveryone={handleEndMeetingForEveryone}
       />
 
-      {/* Live Ephemeral Chat Drawer */}
+      {/* Live Chat Drawer */}
       <ChatDrawer
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
         localStream={localStream}
       />
 
-      {/* Kalesh Games Suite Modal */}
-      <GamesModal
-        isOpen={isGamesOpen}
-        onClose={() => setIsGamesOpen(false)}
+      {/* Meeting Details Modal (Link copy & Calendar .ICS download) */}
+      <MeetingDetailsModal
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
+        meeting={meetingDetails}
+        roomCode={roomCode}
       />
 
-      {/* Anonymous Polls Modal */}
-      <PollsModal
-        isOpen={isPollsOpen}
-        onClose={() => setIsPollsOpen(false)}
+      {/* Classroom Attendance Tracker Modal */}
+      <AttendanceModal
+        isOpen={isAttendanceOpen}
+        roomCode={roomCode}
+        isHost={isHost}
+        onClose={() => setIsAttendanceOpen(false)}
       />
 
-      {/* GIF, Memes & Media Picker Modal */}
+      {/* Device Settings Modal */}
+      <DeviceSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+
+      {/* Meeting Recording Playback & Download Modal */}
+      <RecordingPlaybackModal
+        isOpen={isRecordingModalOpen}
+        recordingBlob={recordingBlob}
+        durationSeconds={localRecordingSeconds}
+        roomCode={roomCode}
+        onClose={() => setIsRecordingModalOpen(false)}
+      />
+
+      {/* Games Modal */}
+      <GamesModal isOpen={isGamesOpen} onClose={() => setIsGamesOpen(false)} />
+
+      {/* Polls Modal */}
+      <PollsModal isOpen={isPollsOpen} onClose={() => setIsPollsOpen(false)} />
+
+      {/* GIF & Memes Picker */}
       <GifPickerModal
         isOpen={isGifPickerOpen}
         onClose={() => setIsGifPickerOpen(false)}
@@ -234,33 +463,43 @@ export function RoomPage() {
         }}
       />
 
-      {/* Non-host Permission to Leave Modal */}
+      {/* Leave Request Modal */}
       <LeaveRequestModal
         isOpen={isLeaveReqOpen}
         onClose={() => setIsLeaveReqOpen(false)}
-        onApprovedLeave={handleLeaveRoom}
+        onApprovedLeave={handleLeaveMeeting}
       />
 
-      {/* Host End Room Confirmation Dialog */}
-      <EndRoomDialog
-        isOpen={isEndRoomOpen}
-        onClose={() => setIsEndRoomOpen(false)}
-      />
+      {/* End Room Confirmation Dialog */}
+      <EndRoomDialog isOpen={isEndRoomOpen} onClose={() => setIsEndRoomOpen(false)} />
 
-      {/* Discord-Style Soundboard & Custom Uploader Modal */}
+      {/* Soundboard Modal */}
       <SoundboardModal
         isOpen={isSoundboardOpen}
         onClose={() => setIsSoundboardOpen(false)}
       />
 
-      {/* Video Filters & Camera Effects Modal */}
+      {/* Video Filters Modal */}
       <VideoFiltersModal
         isOpen={isFiltersOpen}
         onClose={() => setIsFiltersOpen(false)}
         localStream={localStream}
       />
 
-      {/* Exclusive Host Moderation Control Center */}
+      {/* Educational Whiteboard Modal */}
+      <EducationalWhiteboardModal
+        isOpen={isWhiteboardOpen}
+        onClose={() => setIsWhiteboardOpen(false)}
+      />
+
+      {/* Classroom Study Materials Drawer */}
+      <StudyMaterialsDrawer
+        isOpen={isStudyMaterialsOpen}
+        onClose={() => setIsStudyMaterialsOpen(false)}
+        isHost={isHost}
+      />
+
+      {/* Host Controls Modal */}
       <HostControlsModal
         isOpen={isHostControlsOpen}
         onClose={() => setIsHostControlsOpen(false)}
@@ -268,17 +507,6 @@ export function RoomPage() {
           setIsHostControlsOpen(false);
           setIsEndRoomOpen(true);
         }}
-      />
-
-      {/* If directly navigated to room URL without joining */}
-      <JoinRoomModal
-        isOpen={isNeedJoinOpen}
-        initialCode={roomCode || ''}
-        onClose={() => {
-          setIsNeedJoinOpen(false);
-          if (!room) navigate('/');
-        }}
-        onJoinSuccess={() => setIsNeedJoinOpen(false)}
       />
     </div>
   );

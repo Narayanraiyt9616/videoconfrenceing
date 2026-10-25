@@ -8,7 +8,7 @@ const SocketContext = createContext(null);
 
 const BACKEND_URL = (
   import.meta.env.VITE_BACKEND_URL ||
-  'https://videoconfrenceing.onrender.com'
+  (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5000' : 'https://videoconfrenceing.onrender.com')
 ).replace(/\/$/, '');
 
 export function SocketProvider({ children }) {
@@ -25,6 +25,11 @@ export function SocketProvider({ children }) {
   const [floatingReactions, setFloatingReactions] = useState([]);
   const [pendingKnocks, setPendingKnocks] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
+  const [raisedHands, setRaisedHands] = useState([]);
+  const [isCaptionsEnabled, setIsCaptionsEnabled] = useState(false);
+  const [liveCaptions, setLiveCaptions] = useState([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [roomSettings, setRoomSettings] = useState({
     isLocked: false,
     allowJoinerScreenShare: true,
@@ -281,6 +286,47 @@ export function SocketProvider({ children }) {
       });
     });
 
+    // Hand Raise events
+    socket.on('hand:raised', ({ socketId, participantName, participantAvatar, handRaisedAt }) => {
+      soundFx.playPop();
+      toast(`${participantName} raised their hand! ✋`, {
+        icon: '✋',
+        style: { background: '#202124', color: '#8ab4f8', border: '1px solid #3c4043' }
+      });
+      setRaisedHands((prev) => {
+        const filtered = prev.filter((h) => h.socketId !== socketId);
+        return [...filtered, { socketId, participantName, participantAvatar, handRaisedAt: handRaisedAt || Date.now() }];
+      });
+    });
+
+    socket.on('hand:lowered', ({ socketId }) => {
+      setRaisedHands((prev) => prev.filter((h) => h.socketId !== socketId));
+    });
+
+    socket.on('hand:all-lowered', () => {
+      setRaisedHands([]);
+      toast('Host lowered all hands ✋', { icon: '⬇️' });
+    });
+
+    // Live Captions event
+    socket.on('captions:received', (caption) => {
+      setLiveCaptions((prev) => {
+        const next = [...prev.slice(-4), caption];
+        return next;
+      });
+    });
+
+    // Recording Status event
+    socket.on('recording:status-changed', ({ isRecording, recordingDuration }) => {
+      setIsRecording(isRecording);
+      if (recordingDuration !== undefined) setRecordingDuration(recordingDuration);
+      if (isRecording) {
+        toast('Meeting recording started 🔴', { icon: '🔴', style: { background: '#202124', color: '#ea4335' } });
+      } else {
+        toast('Meeting recording stopped ⏹️', { icon: '⏹️' });
+      }
+    });
+
     // Discord-Style Soundboard Listeners
     socket.on('soundboard:played', (sound) => {
       if (sound.isCustom && sound.soundUrl) {
@@ -403,14 +449,16 @@ export function SocketProvider({ children }) {
 
   // Socket: Join Room
   const joinRoom = useCallback(
-    ({ roomCode, name, avatar, isHost = false, hostToken = null }) => {
+    ({ roomCode, name, avatar, email, role, isHost = false, hostToken = null }) => {
       return new Promise((resolve, reject) => {
         if (!socketRef.current) return reject(new Error('Socket not connected'));
 
         const cleanCode = normalizeRoomCode(roomCode);
+        const storedToken = typeof localStorage !== 'undefined' ? localStorage.getItem('meethub_token') : null;
+
         socketRef.current.emit(
           'room:join',
-          { roomCode: cleanCode, name, avatar, isHost, hostToken },
+          { roomCode: cleanCode, name, avatar, email, role, isHost, hostToken, token: storedToken },
           (response) => {
             if (!response?.success) {
               toast.error(response?.error || 'Join room failed');
@@ -714,6 +762,40 @@ export function SocketProvider({ children }) {
     setParticipant((curr) => (curr ? { ...curr, videoFilter: filterId } : curr));
   }, []);
 
+  // Hand raise actions
+  const raiseHand = useCallback(() => {
+    if (!socketRef.current) return;
+    socketRef.current.emit('hand:raise');
+  }, []);
+
+  const lowerHand = useCallback((targetSocketId) => {
+    if (!socketRef.current) return;
+    socketRef.current.emit('hand:lower', { targetSocketId });
+  }, []);
+
+  const lowerAllHands = useCallback(() => {
+    if (!socketRef.current) return;
+    socketRef.current.emit('hand:lower-all');
+  }, []);
+
+  // Live Captions actions
+  const broadcastCaption = useCallback((text, isFinal = false) => {
+    if (!socketRef.current || !text) return;
+    socketRef.current.emit('captions:transcript', { text, isFinal });
+  }, []);
+
+  const toggleCaptions = useCallback(() => {
+    setIsCaptionsEnabled((prev) => !prev);
+  }, []);
+
+  // Recording action
+  const broadcastRecordingStatus = useCallback((active, duration = 0) => {
+    if (!socketRef.current) return;
+    setIsRecording(active);
+    socketRef.current.emit('recording:status', { isRecording: active, recordingDuration: duration });
+  }, []);
+
+  const isHandRaised = raisedHands.some((h) => h.socketId === participant?.id || h.socketId === socketRef.current?.id);
   const isHost = Boolean(participant?.isHost);
 
   return (
@@ -737,6 +819,18 @@ export function SocketProvider({ children }) {
         activeSoundEffect,
         activeVideoFilter,
         isHost,
+        raisedHands,
+        isHandRaised,
+        isCaptionsEnabled,
+        liveCaptions,
+        isRecording,
+        recordingDuration,
+        raiseHand,
+        lowerHand,
+        lowerAllHands,
+        broadcastCaption,
+        toggleCaptions,
+        broadcastRecordingStatus,
         generateNewCode,
         createRoom,
         checkRoom,

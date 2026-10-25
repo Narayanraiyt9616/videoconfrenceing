@@ -6,16 +6,19 @@ import {
   Trash2,
   Smile,
   Shield,
-  Ghost,
   MessageSquare,
   Sparkles,
   Zap,
-  Image as ImageIcon
+  Image as ImageIcon,
+  GraduationCap,
+  User,
+  Hand,
+  Clock
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext.jsx';
 import { GifPickerModal } from './GifPickerModal.jsx';
 
-const QUICK_REACTIONS = ['😂', '🔥', '💀', '👀', '👍'];
+const QUICK_REACTIONS = ['👍', '💡', '❓', '👏', '🎯'];
 
 export function ChatDrawer({ isOpen, onClose, localStream }) {
   const {
@@ -33,7 +36,6 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
   } = useSocket();
 
   const [input, setInput] = useState('');
-  const [isSecretMode, setIsSecretMode] = useState(false);
   const [hoveredMessageId, setHoveredMessageId] = useState(null);
   const [isGifPickerOpen, setIsGifPickerOpen] = useState(false);
   const [zoomedMedia, setZoomedMedia] = useState(null);
@@ -60,11 +62,7 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
     e.preventDefault();
     if (!input.trim()) return;
 
-    if (isSecretMode) {
-      sendSecretMessage(input.trim());
-    } else {
-      sendMessage(input.trim());
-    }
+    sendMessage(input.trim());
 
     setInput('');
     setTyping(false);
@@ -79,63 +77,45 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '100%', opacity: 0 }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="fixed top-0 right-0 bottom-0 w-full sm:w-96 z-50 flex flex-col bg-[#141414]/98 backdrop-blur-2xl border-l border-[#262626] shadow-2xl font-sans"
+      className="fixed top-0 right-0 bottom-0 w-full sm:w-96 z-50 flex flex-col bg-white border-l border-[#CBD5E1] shadow-2xl font-sans"
     >
       {/* Header */}
-      <div className="p-4 border-b border-[#262626] flex items-center justify-between bg-[#181818]">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#ffa31a]/15 border border-[#ffa31a]/30 flex items-center justify-center text-[#ffa31a] shadow-sm">
-            <MessageSquare className="w-5 h-5" />
+      <div className="p-4 border-b border-[#E2E8F0] flex items-center justify-between bg-[#F8FAFC]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-[#1E3A8A] flex items-center justify-center text-white shadow-xs">
+            <MessageSquare className="w-4 h-4" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-extrabold text-white tracking-wide">LIVE CHAT</h3>
-              <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-[#ffa31a] text-black uppercase tracking-wider">
-                RAM ONLY
-              </span>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-extrabold text-[#0F172A]">Classroom Discussion</h3>
             </div>
-            <p className="text-[11px] text-zinc-400">Ephemeral Stream • Zero Logs</p>
+            <p className="text-[11px] text-[#64748B]">Ask questions & collaborate with peers</p>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-[#252525] transition-colors cursor-pointer"
+          className="p-1.5 rounded-lg text-[#64748B] hover:text-[#0F172A] hover:bg-slate-200 transition-colors cursor-pointer"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Secret / Incognito Mode Banner */}
-      {isSecretMode && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="px-4 py-2 bg-[#221808] border-b border-[#ffa31a]/30 flex items-center justify-between text-xs text-[#ffa31a]"
-        >
-          <div className="flex items-center gap-2">
-            <Ghost className="w-4 h-4 text-[#ffa31a] animate-pulse" />
-            <span className="font-bold">INCOGNITO MODE:</span>
-            <span className="text-zinc-300">Identity hidden 🤫</span>
-          </div>
-        </motion.div>
-      )}
-
       {/* Messages Stream */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#F8FAFC]">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-500">
-            <div className="w-14 h-14 rounded-2xl bg-[#1c1c1c] border border-[#2a2a2a] flex items-center justify-center text-2xl mb-3 text-[#ffa31a]">
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#64748B]">
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-2xl mb-2 text-[#2563EB]">
               💬
             </div>
-            <p className="text-sm font-bold text-zinc-300 mb-1">No messages yet</p>
-            <p className="text-xs text-zinc-500 max-w-xs leading-relaxed">
-              Start the conversation or drop a GIF reaction below!
+            <p className="text-sm font-bold text-[#0F172A]">No classroom messages yet</p>
+            <p className="text-xs text-[#64748B] max-w-xs mt-1 leading-relaxed">
+              Post a question to the faculty, ask for clarification, or discuss lecture topics.
             </p>
           </div>
         ) : (
           messages.map((msg) => {
             const isMe = msg.senderId === participant?.id;
-            const isSecret = msg.isSecret;
+            const isFacultySender = msg.senderRole === 'faculty' || msg.isHost;
 
             return (
               <div
@@ -144,90 +124,77 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
                 onMouseLeave={() => setHoveredMessageId(null)}
                 className={`group relative flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
               >
-                {/* Sender Info */}
+                {/* Sender Info with Faculty / Student Badge */}
                 <div className="flex items-center gap-1.5 mb-1 px-1 text-[11px]">
-                  <span>{msg.senderAvatar || '💬'}</span>
+                  <span>{msg.senderAvatar || '🎓'}</span>
+                  <span className={`font-bold ${isMe ? 'text-[#1E3A8A]' : 'text-[#0F172A]'}`}>
+                    {msg.senderName}
+                  </span>
+
+                  {/* Role Badge */}
                   <span
-                    className={`font-bold ${
-                      isSecret
-                        ? 'text-[#ffa31a] italic'
-                        : isMe
-                        ? 'text-[#ffa31a]'
-                        : 'text-zinc-300'
+                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                      isFacultySender
+                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                        : 'bg-blue-50 text-[#1E3A8A] border border-blue-200'
                     }`}
                   >
-                    {isSecret ? 'Anonymous User 🤫' : msg.senderName}
+                    {isFacultySender ? 'Faculty' : 'Student'}
                   </span>
-                  <span className="text-[10px] text-zinc-500">
+
+                  <span className="text-[10px] text-[#94A3B8]">
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
 
                 {/* Message Bubble */}
                 <div
-                  className={`max-w-[85%] p-3 rounded-2xl relative transition-all ${
-                    isSecret
-                      ? 'bg-[#251b0a] border border-[#ffa31a]/40 text-[#ffa31a]'
-                      : isMe
-                      ? 'bg-[#ffa31a]/15 border border-[#ffa31a]/30 text-white'
-                      : 'bg-[#1e1e1e] border border-[#2c2c2c] text-zinc-200'
+                  className={`max-w-[85%] p-3 rounded-2xl relative transition-all shadow-2xs ${
+                    isMe
+                      ? 'bg-[#1E3A8A] text-white rounded-tr-xs'
+                      : isFacultySender
+                      ? 'bg-amber-50/80 border border-amber-200 text-[#0F172A] rounded-tl-xs'
+                      : 'bg-white border border-[#E2E8F0] text-[#0F172A] rounded-tl-xs'
                   }`}
                 >
-                  {/* Inline Media (Image / GIF / Video) Payload */}
+                  {/* Inline Media (Slides, Diagram, Reference Image) */}
                   {msg.mediaUrl && (
-                    <div className="mb-2 rounded-xl overflow-hidden border border-[#333] bg-black cursor-pointer group/media">
+                    <div className="mb-2 rounded-xl overflow-hidden border border-[#CBD5E1] bg-black cursor-pointer">
                       {msg.mediaType === 'video' ? (
-                        <div className="relative">
-                          <video
-                            src={msg.mediaUrl}
-                            controls
-                            playsInline
-                            className="w-full max-h-56 object-contain rounded-t-xl bg-black"
-                          />
-                          <div className="px-2 py-1 bg-[#141414] text-[10px] text-red-400 flex items-center justify-between border-t border-[#2a2a2a]">
-                            <span className="font-extrabold uppercase">
-                              [5s SHORT VIDEO]
-                            </span>
-                            <span
-                              className="text-zinc-400 hover:text-white cursor-pointer"
-                              onClick={() => setZoomedMedia({ url: msg.mediaUrl, type: 'video' })}
-                            >
-                              expand ↗
-                            </span>
-                          </div>
-                        </div>
+                        <video
+                          src={msg.mediaUrl}
+                          controls
+                          playsInline
+                          className="w-full max-h-52 object-contain bg-black"
+                        />
                       ) : (
-                        <div>
-                          <img
-                            src={msg.mediaUrl}
-                            alt="Media"
-                            onClick={() => setZoomedMedia({ url: msg.mediaUrl, type: 'image' })}
-                            className="w-full max-h-56 object-contain rounded-t-xl hover:scale-[1.02] transition-transform"
-                          />
-                          <div className="px-2 py-1 bg-[#141414] text-[10px] text-[#ffa31a] flex items-center justify-between border-t border-[#2a2a2a]">
-                            <span className="font-extrabold uppercase">
-                              [{msg.mediaType === 'gif' ? 'GIF' : 'IMAGE'}]
-                            </span>
-                            <span className="text-zinc-500">click to expand</span>
-                          </div>
-                        </div>
+                        <img
+                          src={msg.mediaUrl}
+                          alt="Lecture Media"
+                          onClick={() => setZoomedMedia(msg.mediaUrl)}
+                          className="w-full max-h-52 object-contain hover:scale-102 transition-transform"
+                        />
                       )}
                     </div>
                   )}
 
-                  {msg.text && <p className="text-xs leading-relaxed break-words">{msg.text}</p>}
+                  {msg.text && (
+                    <p className={`text-xs leading-relaxed break-words font-medium ${isMe ? 'text-white' : 'text-[#0F172A]'}`}>
+                      {msg.text}
+                    </p>
+                  )}
 
-                  {/* Reactions on Message */}
+                  {/* Reactions */}
                   {msg.reactions && Object.keys(msg.reactions).length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
                       {Object.entries(msg.reactions).map(([emoji, uids]) => (
                         <button
                           key={emoji}
                           onClick={() => reactToMessage(msg.id, emoji)}
-                          className={`text-[10px] px-2 py-0.5 rounded-full bg-[#181818] border flex items-center gap-1 transition-colors ${
+                          className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors ${
                             uids.includes(participant?.id)
-                              ? 'border-[#ffa31a] text-[#ffa31a]'
-                              : 'border-[#333] text-zinc-400 hover:border-zinc-500'
+                              ? 'bg-blue-100 text-[#1E3A8A] border border-[#2563EB]'
+                              : 'bg-slate-100 text-[#64748B] border border-[#CBD5E1]'
                           }`}
                         >
                           <span>{emoji}</span>
@@ -238,12 +205,12 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
                   )}
                 </div>
 
-                {/* Hover Quick Actions */}
+                {/* Quick Reaction Hover Bar */}
                 {hoveredMessageId === msg.id && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className={`absolute -top-3 ${isMe ? 'right-2' : 'left-2'} z-10 flex items-center gap-1 p-1 rounded-xl bg-[#222] border border-[#3a3a3a] shadow-xl`}
+                    className={`absolute -top-3 ${isMe ? 'right-2' : 'left-2'} z-10 flex items-center gap-1 p-1 rounded-xl bg-white border border-[#CBD5E1] shadow-lg`}
                   >
                     {QUICK_REACTIONS.map((em) => (
                       <button
@@ -257,7 +224,7 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
                     {(isMe || isHost) && (
                       <button
                         onClick={() => deleteMessage(msg.id)}
-                        className="text-red-400 hover:text-red-300 p-0.5 ml-1"
+                        className="text-red-500 hover:text-red-700 p-0.5 ml-1"
                         title="Delete message"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -274,45 +241,36 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
 
       {/* Typing Indicators */}
       {typingUsers.length > 0 && (
-        <div className="px-4 py-1.5 text-[11px] text-[#ffa31a] italic flex items-center gap-2 bg-[#181818]">
-          <span className="w-2 h-2 rounded-full bg-[#ffa31a] animate-ping" />
+        <div className="px-4 py-1.5 text-[11px] text-[#2563EB] italic flex items-center gap-2 bg-[#F1F5F9] border-t border-[#E2E8F0]">
+          <span className="w-2 h-2 rounded-full bg-[#2563EB] animate-ping" />
           <span>
-            {typingUsers.map((u) => u.userName).join(', ')} {typingUsers.length === 1 ? 'is typing...' : 'are typing...'}
+            {typingUsers.map((u) => u.userName).join(', ')} {typingUsers.length === 1 ? 'is typing a question...' : 'are typing...'}
           </span>
         </div>
       )}
 
       {/* Input Section */}
       {!roomSettings?.allowJoinerChat && !isHost ? (
-        <div className="p-4 border-t border-[#262626] bg-[#161616] text-center">
-          <p className="text-xs font-bold text-amber-400">Host has paused chat for joiners 🔒</p>
-          <p className="text-[11px] text-zinc-500 mt-1">You will be able to send messages when host re-enables it.</p>
+        <div className="p-4 border-t border-[#CBD5E1] bg-slate-50 text-center">
+          <p className="text-xs font-bold text-amber-700">Faculty has paused classroom discussion 🔒</p>
+          <p className="text-[11px] text-[#64748B] mt-0.5">You will be able to post questions when discussion resumes.</p>
         </div>
       ) : (
-        <form onSubmit={handleSend} className="p-3.5 border-t border-[#262626] bg-[#181818] space-y-2.5">
+        <form onSubmit={handleSend} className="p-3.5 border-t border-[#CBD5E1] bg-white space-y-2">
           <div className="flex items-center justify-between">
-            {/* Incognito Mode Toggle */}
-            <button
-              type="button"
-              onClick={() => setIsSecretMode(!isSecretMode)}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                isSecretMode
-                  ? 'bg-[#ffa31a] text-black shadow-md'
-                  : 'bg-[#222] border border-[#333] text-zinc-400 hover:text-white'
-              }`}
-            >
-              <Ghost className="w-3.5 h-3.5" />
-              <span>INCOGNITO {isSecretMode ? 'ON' : 'OFF'}</span>
-            </button>
+            <span className="text-[11px] font-semibold text-[#64748B] flex items-center gap-1">
+              <GraduationCap className="w-3 h-3 text-[#1E3A8A]" />
+              Academic Discussion
+            </span>
 
-            {/* Visual Payload (GIF/Image) Trigger */}
+            {/* Media Attachment */}
             <button
               type="button"
               onClick={() => setIsGifPickerOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold bg-[#222] hover:bg-[#2a2a2a] border border-[#ffa31a]/40 text-[#ffa31a] transition-all cursor-pointer"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-[#F1F5F9] hover:bg-slate-200 text-[#1E3A8A] transition-all cursor-pointer border border-[#CBD5E1]"
             >
               <ImageIcon className="w-3.5 h-3.5" />
-              <span>+ GIF / PHOTO</span>
+              <span>Attach Image / Diagram</span>
             </button>
           </div>
 
@@ -321,16 +279,14 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
               type="text"
               value={input}
               onChange={handleInputChange}
-              placeholder={isSecretMode ? 'Type anonymous message...' : 'Type message here...'}
+              placeholder="Type your question or thought..."
               maxLength={300}
-              className={`w-full pl-4 pr-12 py-2.5 rounded-xl text-xs bg-[#121212] border border-[#2e2e2e] text-white placeholder-zinc-500 focus:outline-none focus:border-[#ffa31a] transition-all ${
-                isSecretMode ? 'border-[#ffa31a] ring-1 ring-[#ffa31a]/30' : ''
-              }`}
+              className="w-full pl-3.5 pr-11 py-2.5 rounded-xl text-xs bg-[#F8FAFC] border border-[#CBD5E1] text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 transition-all font-medium"
             />
             <button
               type="submit"
               disabled={!input.trim()}
-              className="absolute right-1.5 p-2 rounded-lg bg-[#ffa31a] hover:bg-[#ff9000] text-black font-bold disabled:opacity-30 transition-all cursor-pointer"
+              className="absolute right-1.5 p-2 rounded-lg bg-[#1E3A8A] hover:bg-[#172554] text-white font-bold disabled:opacity-40 transition-all cursor-pointer shadow-2xs"
             >
               <Send className="w-3.5 h-3.5" />
             </button>
@@ -338,41 +294,32 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
         </form>
       )}
 
-      {/* Fullscreen Media Zoom Modal */}
+      {/* Media Zoom Modal */}
       {zoomedMedia && (
         <div
           onClick={() => setZoomedMedia(null)}
-          className="fixed inset-0 z-[80] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
+          className="fixed inset-0 z-80 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative max-w-2xl max-h-[85vh] rounded-2xl overflow-hidden border border-[#ffa31a]/40 bg-[#121212] shadow-2xl flex items-center justify-center p-2"
+            className="relative max-w-2xl max-h-[85vh] rounded-2xl overflow-hidden bg-white shadow-2xl p-2"
           >
-            {zoomedMedia.type === 'video' ? (
-              <video
-                src={zoomedMedia.url}
-                controls
-                autoPlay
-                className="w-full h-auto object-contain max-h-[80vh] rounded-xl"
-              />
-            ) : (
-              <img
-                src={zoomedMedia.url || zoomedMedia}
-                alt="Zoomed Media"
-                className="w-full h-auto object-contain max-h-[80vh] rounded-xl"
-              />
-            )}
+            <img
+              src={zoomedMedia}
+              alt="Zoomed Reference"
+              className="w-full h-auto object-contain max-h-[80vh] rounded-xl"
+            />
             <button
               onClick={() => setZoomedMedia(null)}
-              className="absolute top-4 right-4 p-2 rounded-full bg-black/80 text-[#ffa31a] hover:text-white transition-colors cursor-pointer"
+              className="absolute top-4 right-4 p-2 rounded-full bg-black/70 text-white hover:bg-black transition-colors cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* GIF & Image Picker Modal */}
+      {/* Image Picker Modal */}
       <GifPickerModal
         isOpen={isGifPickerOpen}
         onClose={() => setIsGifPickerOpen(false)}
@@ -382,7 +329,7 @@ export function ChatDrawer({ isOpen, onClose, localStream }) {
             mediaUrl,
             mediaType,
             text,
-            isSecret: isSecretMode
+            isSecret: false
           });
         }}
       />

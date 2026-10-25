@@ -188,23 +188,23 @@ export function VideoGrid({
     >
       {/* Layout Control / Invite Floating Pill */}
       <div className="absolute top-3 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
-        {/* Alone in room invite banner */}
+        {/* Alone in classroom invite banner */}
         {totalCount === 1 ? (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="pointer-events-auto px-3.5 py-1.5 rounded-xl bg-[#181818]/90 border border-[#2e2e2e] text-white flex items-center gap-2.5 text-xs shadow-xl backdrop-blur-md"
+            className="pointer-events-auto px-3.5 py-1.5 rounded-xl bg-white/95 border border-[#CBD5E1] text-[#0F172A] flex items-center gap-2.5 text-xs shadow-md backdrop-blur-md"
           >
-            <span className="w-2 h-2 rounded-full bg-[#ffa31a] animate-ping" />
-            <span className="text-zinc-300">
-              <strong className="text-[#ffa31a]">Waiting for friends...</strong> Share room link to start
+            <span className="w-2 h-2 rounded-full bg-[#2563EB] animate-ping" />
+            <span className="text-[#64748B]">
+              <strong className="text-[#1E3A8A]">Waiting for attendees...</strong> Share classroom link to begin
             </span>
             <button
               onClick={onInviteClick}
-              className="ml-1 px-2.5 py-1 rounded-lg bg-[#ffa31a] hover:bg-[#ff9000] text-black font-extrabold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-md"
+              className="ml-1 px-2.5 py-1 rounded-lg bg-[#1E3A8A] hover:bg-[#172554] text-white font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
             >
-              <Share2 className="w-3 h-3 text-black" />
-              <span>INVITE</span>
+              <Share2 className="w-3 h-3 text-white" />
+              <span>Share Link</span>
             </button>
           </motion.div>
         ) : (
@@ -213,14 +213,14 @@ export function VideoGrid({
 
         {/* Layout Switcher (Grid vs Active Speaker Spotlight) */}
         {totalCount >= 2 && (
-          <div className="pointer-events-auto flex items-center gap-1 p-1 rounded-xl bg-[#141414]/90 border border-[#2c2c2c] backdrop-blur-md shadow-xl text-xs font-bold text-zinc-400">
+          <div className="pointer-events-auto flex items-center gap-1 p-1 rounded-xl bg-white/95 border border-[#CBD5E1] backdrop-blur-md shadow-md text-xs font-bold text-[#64748B]">
             <button
               type="button"
               onClick={() => setLayoutMode('auto')}
               className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
                 layoutMode === 'auto'
-                  ? 'bg-[#ffa31a] text-black font-black shadow-sm'
-                  : 'hover:text-white'
+                  ? 'bg-[#1E3A8A] text-white font-bold shadow-xs'
+                  : 'hover:text-[#0F172A]'
               }`}
               title="Auto Layout (Grid or Active Speaker)"
             >
@@ -232,8 +232,8 @@ export function VideoGrid({
               onClick={() => setLayoutMode('grid')}
               className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
                 layoutMode === 'grid'
-                  ? 'bg-[#ffa31a] text-black font-black shadow-sm'
-                  : 'hover:text-white'
+                  ? 'bg-[#1E3A8A] text-white font-bold shadow-xs'
+                  : 'hover:text-[#0F172A]'
               }`}
               title="Balanced Grid Layout"
             >
@@ -245,8 +245,8 @@ export function VideoGrid({
               onClick={() => setLayoutMode('speaker')}
               className={`px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
                 layoutMode === 'speaker'
-                  ? 'bg-[#ffa31a] text-black font-black shadow-sm'
-                  : 'hover:text-white'
+                  ? 'bg-[#1E3A8A] text-white font-bold shadow-xs'
+                  : 'hover:text-[#0F172A]'
               }`}
               title="Speaker Spotlight Layout"
             >

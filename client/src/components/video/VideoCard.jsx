@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, memo } from 'react';
-import { Mic, MicOff, Video, VideoOff, Crown, MonitorUp, Volume2, Wand2 } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Crown, MonitorUp, Volume2, Wand2, GraduationCap } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const VideoCard = memo(function VideoCard({
@@ -29,7 +29,6 @@ export const VideoCard = memo(function VideoCard({
         videoEl.srcObject = stream;
       }
       videoEl.play().catch((err) => {
-        // Autoplay may need user gesture
         console.warn('[VideoCard] Autoplay interrupted:', err);
       });
     }
@@ -61,11 +60,11 @@ export const VideoCard = memo(function VideoCard({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.2 }}
-      className={`relative w-full h-full rounded-2xl overflow-hidden bg-[#121212] border transition-all duration-300 flex items-center justify-center select-none shadow-lg ${
+      className={`relative w-full h-full rounded-2xl overflow-hidden bg-[#0F172A] border transition-all duration-300 flex items-center justify-center select-none shadow-md ${
         isActuallySpeaking
-          ? 'border-[#ffa31a] shadow-[0_0_25px_rgba(255,163,26,0.4)] ring-2 ring-[#ffa31a]'
-          : 'border-[#262626] hover:border-[#3a3a3a]'
-      } ${isFeatured ? 'ring-2 ring-[#ffa31a]/60' : ''}`}
+          ? 'border-[#2563EB] shadow-[0_0_20px_rgba(37,99,235,0.4)] ring-2 ring-[#2563EB]'
+          : 'border-[#334155] hover:border-[#64748B]'
+      } ${isFeatured ? 'ring-2 ring-[#0D9488]' : ''}`}
     >
       {/* Video Element */}
       <video
@@ -80,82 +79,82 @@ export const VideoCard = memo(function VideoCard({
 
       {/* Camera Off Avatar State */}
       {isCameraOff && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#161616] to-[#0f0f0f] p-4">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#1E293B] to-[#0F172A] p-4 text-white">
           <motion.div
-            animate={isSpeaking ? { scale: [1, 1.12, 1] } : {}}
+            animate={isSpeaking ? { scale: [1, 1.1, 1] } : {}}
             transition={{ duration: 0.45, repeat: isSpeaking ? Infinity : 0 }}
             className={`w-18 h-18 sm:w-22 sm:h-22 rounded-full flex items-center justify-center text-3xl sm:text-5xl border transition-all duration-200 ${
               isSpeaking
-                ? 'border-[#ffa31a] bg-[#ffa31a]/20 shadow-[0_0_30px_rgba(255,163,26,0.4)]'
-                : 'border-[#333333] bg-[#202020]'
+                ? 'border-[#2563EB] bg-[#2563EB]/20 shadow-[0_0_25px_rgba(37,99,235,0.5)]'
+                : 'border-[#334155] bg-[#1E293B]'
             }`}
           >
-            {participant?.avatar || '🔥'}
+            {participant?.avatar || '🎓'}
           </motion.div>
-          <span className="text-[10px] font-bold text-[#888888] mt-3 uppercase tracking-widest">
-            CAMERA OFF
+          <span className="text-[10px] font-bold text-[#94A3B8] mt-3 uppercase tracking-wider">
+            Camera Off
           </span>
         </div>
       )}
 
-      {/* Top Badges */}
+      {/* Top Academic Badges */}
       <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-20 pointer-events-none">
         {participant?.isHost && (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-[#ffa31a] text-black shadow-sm">
-            <Crown className="w-3 h-3 fill-black" />
-            <span>HOST</span>
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#1E3A8A] text-white shadow-xs border border-blue-400/30">
+            <Crown className="w-3 h-3 text-[#F59E0B] fill-[#F59E0B]" />
+            <span>FACULTY</span>
           </div>
         )}
         {isScreenSharing && (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#252525] border border-[#3e3e3e] text-[#ffa31a] shadow-sm">
-            <MonitorUp className="w-3 h-3 text-[#ffa31a]" />
-            <span>SCREEN</span>
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#0D9488] text-white shadow-xs">
+            <MonitorUp className="w-3 h-3 text-white" />
+            <span>PRESENTING</span>
           </div>
         )}
         {activeFilter !== 'none' && !isCameraOff && (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-950/80 border border-purple-500/40 text-purple-300 shadow-sm backdrop-blur-sm">
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-950/80 border border-purple-500/40 text-purple-300 shadow-xs backdrop-blur-xs">
             <Wand2 className="w-3 h-3 text-purple-400" />
             <span className="uppercase tracking-wider">{activeFilter}</span>
           </div>
         )}
         {isSpeaking && (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#ffa31a] text-black shadow-md">
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#2563EB] text-white shadow-sm">
             <Volume2 className="w-3 h-3 animate-pulse" />
             <span>SPEAKING</span>
           </div>
         )}
       </div>
 
-      {/* Bottom Bar: Name Tag & Status Indicators */}
+      {/* Bottom Bar: Name Tag & Hardware Status Indicators */}
       <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between z-20 pointer-events-none">
         {/* Name Tag */}
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/80 border border-[#333333] max-w-[75%] backdrop-blur-md shadow-md">
-          <span className="text-xs">{participant?.avatar || '🔥'}</span>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/75 border border-white/15 max-w-[75%] backdrop-blur-xs shadow-md">
+          <span className="text-xs">{participant?.avatar || '🎓'}</span>
           <span className="text-xs font-bold text-white truncate">
-            {participant?.name || 'Friend'} {isLocal && '(You)'}
+            {participant?.name || 'Class Participant'} {isLocal && '(You)'}
           </span>
         </div>
 
         {/* Hardware Status Badges */}
         <div className="flex items-center gap-1.5">
           <div
-            className={`w-7 h-7 rounded-lg flex items-center justify-center backdrop-blur-md border transition-all ${
+            className={`w-7 h-7 rounded-lg flex items-center justify-center backdrop-blur-xs border transition-all ${
               isMuted
-                ? 'bg-red-500/20 border-red-500/40 text-red-400'
+                ? 'bg-[#DC2626] border-red-500 text-white shadow-xs'
                 : isSpeaking
-                ? 'bg-[#ffa31a] border-[#ffa31a] text-black shadow-md shadow-[#ffa31a]/40 font-bold'
-                : 'bg-black/80 border-[#333333] text-[#ffa31a]'
+                ? 'bg-[#2563EB] border-[#2563EB] text-white shadow-sm'
+                : 'bg-black/70 border-white/15 text-slate-300'
             }`}
-            title={isMuted ? 'Muted' : 'Mic Active'}
+            title={isMuted ? 'Microphone Muted' : 'Microphone Active'}
           >
             {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
           </div>
 
           <div
-            className={`w-7 h-7 rounded-lg flex items-center justify-center backdrop-blur-md border transition-all ${
+            className={`w-7 h-7 rounded-lg flex items-center justify-center backdrop-blur-xs border transition-all ${
               isCameraOff
-                ? 'bg-red-500/20 border-red-500/40 text-red-400'
-                : 'bg-black/80 border-[#333333] text-white'
+                ? 'bg-[#DC2626] border-red-500 text-white shadow-xs'
+                : 'bg-black/70 border-white/15 text-white'
             }`}
             title={isCameraOff ? 'Camera Off' : 'Camera On'}
           >
